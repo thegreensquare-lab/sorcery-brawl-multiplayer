@@ -1,0 +1,12 @@
+{
+  "name": "sorcery-brawl-multiplayer",
+  "version": "1.0.0",
+  "description": "Sorcery Brawl multiplayer server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
