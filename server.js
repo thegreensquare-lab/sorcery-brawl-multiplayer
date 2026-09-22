@@ -2,6 +2,29 @@ const http = require("http");
 const WebSocket = require("ws");
 
 const PORT = process.env.PORT || 3000;
+const rooms = new Map();
+
+const SHAPES = ["circle", "square", "triangle", "rhombus", "star"];
+const PET_TYPES = [1, 2, 3];
+
+function randomFrom(list) {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function send(socket, message) {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(message));
+  }
+}
+
+function broadcast(room, message, except = null) {
+  if (!room) return;
+
+  for (const player of room.players) {
+    if (player.socket === except) continue;
+    send(player.socket, message);
+  }
+}
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, {
@@ -15,165 +38,69 @@ const wss = new WebSocket.Server({
   server
 });
 
-const rooms = new Map();
-
-const SHAPES = [
-  "circle",
-  "square",
-  "triangle",
-  "rhombus",
-  "star"
-];
-
-const PET_TYPES = [
-  1, // Divine Dogs
-  2, // Nue
-  3  // Rabbit Escape
-];
-
-function randomFrom(list) {
-  return list[Math.floor(Math.random() * list.length)];
-}
-
-function send(socket, message) {
-  if (
-    socket &&
-    socket.readyState === WebSocket.OPEN
-  ) {
-    socket.send(JSON.stringify(message));
-  }
-}
-
-function broadcast(room, message, except = null) {
-  if (!room) return;
-
-  for (const player of room.players) {
-    if (player.socket === except) {
-      continue;
-    }
-
-    send(player.socket, message);
-  }
-}
-
-function broadcastToAll(room, message) {
-  if (!room) return;
-
-  for (const player of room.players) {
-    send(player.socket, message);
-  }
-}
-
-function getOpponent(room, player) {
-  if (!room || !player) {
+function chooseShape(player) {
+  if (!player || !player.selectedShape) {
     return null;
   }
 
-  return (
-    room.players.find(
-      (other) => other !== player
-    ) || null
-  );
-}
-
-function getRoomState(room) {
-  if (!room) {
-    return null;
+  if (player.selectedShape === "random") {
+    return randomFrom(SHAPES);
   }
 
-  return {
-    players: room.players.map((player) => ({
-      number: player.number,
-      ready: player.ready,
-      shape: player.shape,
-      randomShape: player.randomShape
-    }))
-  };
+  return player.selectedShape;
 }
 
-function chooseRoundShapes(room) {
+function startMatch(room) {
   if (!room || room.players.length !== 2) {
     return;
   }
 
+  if (!room.players.every(p => p.ready)) {
+    return;
+  }
+
+  if (
+    !room.players.every(
+      p =>
+        SHAPES.includes(p.selectedShape) ||
+        p.selectedShape === "random"
+    )
+  ) {
+    return;
+  }
+
   const p1 = room.players.find(
-    (player) => player.number === 1
+    p => p.number === 1
   );
 
   const p2 = room.players.find(
-    (player) => player.number === 2
+    p => p.number === 2
   );
 
   if (!p1 || !p2) {
     return;
   }
 
-  /*
-    IMPORTANT:
+  // Resolve Random exactly once on the server.
+  p1.shape = chooseShape(p1);
+  p2.shape = chooseShape(p2);
 
-    Each player chooses their own character.
+  room.roundEndHandled = false;
 
-    If they chose Random, the SERVER chooses the
-    character. This means both computers receive
-    exactly the same character assignment.
-  */
-
-  if (p1.randomShape) {
-    p1.shape = randomFrom(SHAPES);
-  }
-
-  if (p2.randomShape) {
-    p2.shape = randomFrom(SHAPES);
-  }
-}
-
-function startMatch(room) {
-  if (!room) {
-    return;
-  }
-
-  if (room.players.length !== 2) {
-    return;
-  }
-
-  if (
-    !room.players.every(
-      (player) => player.ready
-    )
-  ) {
-    return;
-  }
-
-  chooseRoundShapes(room);
-
-  room.started = true;
-  room.round = 1;
-
-  broadcastToAll(room, {
+  const payload = {
     type: "match-start",
 
-    p1Shape:
-      room.players.find(
-        (p) => p.number === 1
-      )?.shape || null,
-
-    p2Shape:
-      room.players.find(
-        (p) => p.number === 2
-      )?.shape || null,
+    p1Shape: p1.shape,
+    p2Shape: p2.shape,
 
     p1Random:
-      !!room.players.find(
-        (p) => p.number === 1
-      )?.randomShape,
+      p1.selectedShape === "random",
 
     p2Random:
-      !!room.players.find(
-        (p) => p.number === 2
-      )?.randomShape,
+      p2.selectedShape === "random"
+  };
 
-    round: room.round
-  });
+  broadcast(room, payload);
 }
 
 function resetForNextRound(room) {
@@ -181,74 +108,57 @@ function resetForNextRound(room) {
     return;
   }
 
-  chooseRoundShapes(room);
+  const p1 = room.players.find(
+    p => p.number === 1
+  );
 
-  room.round += 1;
+  const p2 = room.players.find(
+    p => p.number === 2
+  );
 
-  /*
-    Players remain ready.
-
-    Their scores are NOT stored here because the
-    actual game client keeps its own score and
-    reports the round result.
-
-    The server's job is to synchronize the new
-    character selections and round start.
-  */
-
-  broadcastToAll(room, {
-    type: "round-reset",
-
-    p1Shape:
-      room.players.find(
-        (p) => p.number === 1
-      )?.shape || null,
-
-    p2Shape:
-      room.players.find(
-        (p) => p.number === 2
-      )?.shape || null,
-
-    p1Random:
-      !!room.players.find(
-        (p) => p.number === 1
-      )?.randomShape,
-
-    p2Random:
-      !!room.players.find(
-        (p) => p.number === 2
-      )?.randomShape,
-
-    round: room.round
-  });
-}
-
-function cleanupRoom(roomId, room) {
-  if (!room) {
+  if (!p1 || !p2) {
     return;
   }
 
-  if (room.players.length === 0) {
-    rooms.delete(roomId);
-  }
+  // Re-roll only players who originally chose Random.
+  p1.shape = chooseShape(p1);
+  p2.shape = chooseShape(p2);
+
+  room.roundEndHandled = false;
+
+  broadcast(room, {
+    type: "round-reset",
+
+    p1Shape: p1.shape,
+    p2Shape: p2.shape,
+
+    p1Random:
+      p1.selectedShape === "random",
+
+    p2Random:
+      p2.selectedShape === "random"
+  });
 }
 
-wss.on("connection", (socket) => {
+wss.on("connection", socket => {
   let roomId = null;
   let player = null;
 
-  socket.on("message", (raw) => {
+  socket.on("message", raw => {
     let message;
 
     try {
       message = JSON.parse(
         raw.toString()
       );
-    } catch (error) {
+    } catch {
       return;
     }
 
-    if (!message || typeof message !== "object") {
+    if (
+      !message ||
+      typeof message !== "object"
+    ) {
       return;
     }
 
@@ -264,19 +174,14 @@ wss.on("connection", (socket) => {
       ).trim();
 
       if (!roomId) {
-        send(socket, {
-          type: "error",
-          message: "A room code is required."
-        });
-
         return;
       }
 
       if (!rooms.has(roomId)) {
         rooms.set(roomId, {
           players: [],
-          started: false,
-          round: 0
+          roundEndHandled: false,
+          megumiPets: {}
         });
       }
 
@@ -290,11 +195,6 @@ wss.on("connection", (socket) => {
         return;
       }
 
-      /*
-        Player number is determined by the order
-        they join the room.
-      */
-
       player = {
         socket,
 
@@ -303,9 +203,17 @@ wss.on("connection", (socket) => {
 
         ready: false,
 
-        shape: null,
+        /*
+          This is deliberately separate from
+          the actual in-game character.
 
-        randomShape: false
+          It prevents the game's default Choso
+          character from being used accidentally.
+        */
+
+        selectedShape: null,
+
+        shape: null
       };
 
       room.players.push(player);
@@ -320,41 +228,22 @@ wss.on("connection", (socket) => {
           player.number
       });
 
-      /*
-        Tell the existing player that someone joined.
-      */
-
       if (room.players.length === 2) {
         broadcast(
           room,
+
           {
             type: "player-joined",
 
             players: 2
           },
+
           socket
         );
       }
 
-      /*
-        Send the current room state to the new player.
-      */
-
-      send(socket, {
-        type: "room-state",
-
-        state:
-          getRoomState(room)
-      });
-
       return;
     }
-
-    /*
-    ==================================================
-    EVERYTHING BELOW REQUIRES A VALID ROOM
-    ==================================================
-    */
 
     if (!player || !roomId) {
       return;
@@ -368,48 +257,106 @@ wss.on("connection", (socket) => {
 
     /*
     ==================================================
+    CHARACTER SELECTION
+    ==================================================
+
+    This is the important fix.
+
+    The selected character is stored separately
+    for THIS socket.
+
+    Player 1 can therefore select one character
+    while Player 2 selects another.
+    */
+
+    if (
+      message.type ===
+      "select-character"
+    ) {
+      const shape = String(
+        message.shape || ""
+      ).toLowerCase();
+
+      if (
+        !SHAPES.includes(shape) &&
+        shape !== "random"
+      ) {
+        return;
+      }
+
+      /*
+        Don't allow changing character after
+        clicking Ready.
+      */
+
+      if (player.ready) {
+        return;
+      }
+
+      player.selectedShape = shape;
+
+      /*
+        Do NOT set player.shape here.
+
+        player.shape is reserved for the actual
+        character used in the match.
+      */
+
+      player.shape = null;
+
+      /*
+        Only tell this browser that its selection
+        was accepted.
+      */
+
+      send(socket, {
+        type: "character-selected",
+
+        playerNumber:
+          player.number,
+
+        shape
+      });
+
+      return;
+    }
+
+    /*
+    ==================================================
     READY
     ==================================================
     */
 
-    if (message.type === "ready") {
-      let shape = String(
-        message.shape || ""
-      ).toLowerCase();
-
+    if (
+      message.type === "ready"
+    ) {
       /*
-        Accept "random" as a special character.
+        IMPORTANT:
+
+        We completely ignore any character sent
+        inside the Ready message.
+
+        The server uses the character previously
+        stored by select-character.
       */
 
-      if (
-        shape !== "random" &&
-        !SHAPES.includes(shape)
-      ) {
+      if (!player.selectedShape) {
         send(socket, {
           type: "error",
-          message: "Invalid character."
+
+          message:
+            "Choose a character before Ready."
         });
 
         return;
       }
 
-      player.randomShape =
-        shape === "random";
-
-      player.shape =
-        player.randomShape
-          ? null
-          : shape;
-
       player.ready = true;
 
-      /*
-        Tell this player whether their opponent
-        is ready.
-      */
-
       const opponent =
-        getOpponent(room, player);
+        room.players.find(
+          p => p !== player
+        );
 
       send(socket, {
         type: "ready-state",
@@ -426,35 +373,32 @@ wss.on("connection", (socket) => {
           )
       });
 
-      /*
-        Tell the opponent that this player is ready.
-      */
-
       if (opponent) {
-        send(opponent.socket, {
-          type: "ready-state",
+        send(
+          opponent.socket,
 
-          playerNumber:
-            player.number,
+          {
+            type: "ready-state",
 
-          ready: true,
+            playerNumber:
+              player.number,
 
-          opponentReady: true
-        });
+            ready: true,
+
+            opponentReady: true
+          }
+        );
       }
 
       /*
-        Start only when BOTH players are ready.
+        Only start once BOTH players have:
+
+        1. joined
+        2. selected a character
+        3. clicked Ready
       */
 
-      if (
-        room.players.length === 2 &&
-        room.players.every(
-          (p) => p.ready
-        )
-      ) {
-        startMatch(room);
-      }
+      startMatch(room);
 
       return;
     }
@@ -466,7 +410,8 @@ wss.on("connection", (socket) => {
     */
 
     if (
-      message.type === "cancel-ready"
+      message.type ===
+      "cancel-ready"
     ) {
       player.ready = false;
 
@@ -478,27 +423,30 @@ wss.on("connection", (socket) => {
 
         ready: false,
 
-        opponentReady:
-          !!(
-            getOpponent(room, player)
-              ?.ready
-          )
+        opponentReady: false
       });
 
       const opponent =
-        getOpponent(room, player);
+        room.players.find(
+          p => p !== player
+        );
 
       if (opponent) {
-        send(opponent.socket, {
-          type: "ready-state",
+        send(
+          opponent.socket,
 
-          playerNumber:
-            player.number,
+          {
+            type: "ready-state",
 
-          ready: false,
+            playerNumber:
+              player.number,
 
-          opponentReady: false
-        });
+            ready: false,
+
+            opponentReady:
+              !!opponent.ready
+          }
+        );
       }
 
       return;
@@ -506,42 +454,26 @@ wss.on("connection", (socket) => {
 
     /*
     ==================================================
-    MEGUMI SHIKIGAMI REQUEST
+    MEGUMI SHIKIGAMI
     ==================================================
-
-    The player asks the server for one random
-    Shikigami.
-
-    The server chooses it ONCE.
-
-    Both computers receive the SAME result.
     */
 
     if (
       message.type ===
       "megumi-pet-request"
     ) {
-      const requestedPlayerNumber =
+      const targetNumber =
         Number(
           message.playerNumber
         );
 
-      if (
-        requestedPlayerNumber !==
-          1 &&
-        requestedPlayerNumber !==
-          2
-      ) {
-        return;
-      }
-
       /*
-        A player can only request a pet result
+        A player can only request a Shikigami
         for themselves.
       */
 
       if (
-        requestedPlayerNumber !==
+        targetNumber !==
         player.number
       ) {
         return;
@@ -550,25 +482,20 @@ wss.on("connection", (socket) => {
       const petType =
         randomFrom(PET_TYPES);
 
-      /*
-        Remember the result in the room so that
-        repeated requests during the same selection
-        can return the same result.
-      */
-
-      if (!room.megumiPets) {
-        room.megumiPets = {};
-      }
-
       room.megumiPets[
-        requestedPlayerNumber
+        targetNumber
       ] = petType;
 
-      broadcastToAll(room, {
-        type: "megumi-pet-type",
+      /*
+        Both computers receive the same result.
+      */
+
+      broadcast(room, {
+        type:
+          "megumi-pet-type",
 
         playerNumber:
-          requestedPlayerNumber,
+          targetNumber,
 
         petType
       });
@@ -578,60 +505,41 @@ wss.on("connection", (socket) => {
 
     /*
     ==================================================
-    MEGUMI PET REQUEST AGAIN
+    ROUND END
     ==================================================
     */
 
     if (
       message.type ===
-      "megumi-pet-request-existing"
+      "round-end"
     ) {
-      const requestedPlayerNumber =
+      const winnerNumber =
         Number(
-          message.playerNumber
+          message.winnerNumber
         );
 
       if (
-        requestedPlayerNumber !==
-          1 &&
-        requestedPlayerNumber !==
-          2
+        winnerNumber !== 1 &&
+        winnerNumber !== 2
       ) {
         return;
       }
 
-      if (
-        requestedPlayerNumber !==
-        player.number
-      ) {
+      /*
+        Prevent the same round from being
+        counted twice.
+      */
+
+      if (room.roundEndHandled) {
         return;
       }
 
-      if (!room.megumiPets) {
-        room.megumiPets = {};
-      }
+      room.roundEndHandled = true;
 
-      let petType =
-        room.megumiPets[
-          requestedPlayerNumber
-        ];
+      broadcast(room, {
+        type: "round-end",
 
-      if (!PET_TYPES.includes(petType)) {
-        petType =
-          randomFrom(PET_TYPES);
-
-        room.megumiPets[
-          requestedPlayerNumber
-        ] = petType;
-      }
-
-      broadcastToAll(room, {
-        type: "megumi-pet-type",
-
-        playerNumber:
-          requestedPlayerNumber,
-
-        petType
+        winnerNumber
       });
 
       return;
@@ -644,39 +552,19 @@ wss.on("connection", (socket) => {
     */
 
     if (
-      message.type === "next-round"
+      message.type ===
+      "next-round"
     ) {
-      if (room.players.length !== 2) {
+      if (
+        !room.roundEndHandled ||
+        room.players.length !== 2
+      ) {
         return;
       }
 
       /*
-        Only allow a player who actually belongs
-        to the room to request the next round.
-      */
-
-      if (!player) {
-        return;
-      }
-
-      /*
-        Avoid starting another round while the
-        players are not both ready.
-
-        If the client sends next-round directly,
-        we keep both players synchronized.
-      */
-
-      if (!room.players.every(
-        (p) => p.ready
-      )) {
-        return;
-      }
-
-      /*
-        Clear the old Megumi pet selections.
-        A new Shikigami can therefore be chosen
-        during the new round.
+        Clear old Megumi selections so the next
+        round can choose a fresh Shikigami.
       */
 
       room.megumiPets = {};
@@ -688,33 +576,19 @@ wss.on("connection", (socket) => {
 
     /*
     ==================================================
-    GAME STATE / INPUT RELAY
+    GAME STATE RELAY
     ==================================================
-
-    This is the important multiplayer section.
-
-    A client sends its local game information.
-
-    The server forwards it ONLY to the other
-    computer.
-
-    The sender does NOT receive its own state back.
-
-    This prevents a player's own keyboard from
-    controlling the opponent.
     */
 
-    if (message.type === "game") {
-      if (room.players.length !== 2) {
-        return;
-      }
-
+    if (
+      message.type === "game"
+    ) {
       /*
-        Never allow a client to claim it is another
-        player.
+        Send this player's game state ONLY to
+        the other player.
 
-        The server attaches the actual player number
-        belonging to this socket.
+        The server attaches the real player
+        number instead of trusting the client.
       */
 
       broadcast(
@@ -728,125 +602,6 @@ wss.on("connection", (socket) => {
 
           data:
             message.data
-        },
-
-        socket
-      );
-
-      return;
-    }
-
-    /*
-    ==================================================
-    INPUT RELAY
-    ==================================================
-
-    Some versions of the client may send individual
-    keyboard/input messages instead of full game
-    state. Those are also forwarded.
-
-    Again, the server assigns the real player number.
-    */
-
-    if (
-      message.type === "input"
-    ) {
-      if (room.players.length !== 2) {
-        return;
-      }
-
-      broadcast(
-        room,
-
-        {
-          type: "input",
-
-          playerNumber:
-            player.number,
-
-          data:
-            message.data
-        },
-
-        socket
-      );
-
-      return;
-    }
-
-    /*
-    ==================================================
-    ACTION RELAY
-    ==================================================
-
-    Used for attacks, abilities and supers when the
-    client sends actions separately.
-    */
-
-    if (
-      message.type === "action"
-    ) {
-      if (room.players.length !== 2) {
-        return;
-      }
-
-      broadcast(
-        room,
-
-        {
-          type: "action",
-
-          playerNumber:
-            player.number,
-
-          action:
-            message.action,
-
-          data:
-            message.data
-        },
-
-        socket
-      );
-
-      return;
-    }
-
-    /*
-    ==================================================
-    ROUND RESULT
-    ==================================================
-
-    The client can tell the other computer that a
-    round ended.
-
-    The server does NOT decide who won.
-
-    It simply synchronizes the event.
-    */
-
-    if (
-      message.type ===
-      "round-result"
-    ) {
-      if (room.players.length !== 2) {
-        return;
-      }
-
-      broadcast(
-        room,
-
-        {
-          type: "round-result",
-
-          playerNumber:
-            player.number,
-
-          winner:
-            message.winner,
-
-          loser:
-            message.loser
         },
 
         socket
@@ -874,7 +629,7 @@ wss.on("connection", (socket) => {
 
   /*
   ==================================================
-  DISCONNECT
+  PLAYER DISCONNECT
   ==================================================
   */
 
@@ -890,36 +645,27 @@ wss.on("connection", (socket) => {
       return;
     }
 
-    /*
-      Remove this player's socket.
-    */
-
     room.players =
       room.players.filter(
-        (p) =>
+        p =>
           p.socket !== socket
       );
 
-    /*
-      Reset the room if somebody leaves.
-    */
-
-    room.started = false;
-    room.round = 0;
+    room.roundEndHandled = false;
     room.megumiPets = {};
 
     /*
-      Tell the remaining player.
+      Tell the remaining player that their
+      opponent disconnected.
     */
 
-    broadcastToAll(room, {
+    broadcast(room, {
       type: "player-left"
     });
 
-    cleanupRoom(
-      roomId,
-      room
-    );
+    if (room.players.length === 0) {
+      rooms.delete(roomId);
+    }
   });
 });
 
