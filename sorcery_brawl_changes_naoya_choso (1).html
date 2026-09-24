@@ -1,0 +1,3947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sorcery Brawl</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --arena: #161b22;
+    --wall: #30363d;
+    --p1: #5ec8ff;
+    --p1-glow: rgba(94, 200, 255, 0.35);
+    --p2: #f85149;
+    --p2-glow: rgba(248, 81, 73, 0.35);
+    --text: #c9d1d9;
+    --text-dim: #6e7681;
+    --accent: #5ec8ff;
+    --hp-good: #3fb950;
+    --hp-bad: #f85149;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ---------- Shared button style ---------- */
+  button {
+    background: var(--wall);
+    color: var(--text);
+    border: none;
+    border-radius: 6px;
+    padding: 10px 22px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  button:hover { background: #3d444d; }
+
+  /* ---------- Home screen ---------- */
+  #homeScreen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    width: 800px;
+    height: 560px;
+    padding: 60px 20px;
+  }
+  #homeScreen h1 {
+    font-size: 40px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: 1px;
+    color: var(--text);
+  }
+  #homeScreen .subtitle {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-top: 10px;
+  }
+  .home-buttons {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  #playGameBtn {
+    font-size: 16px;
+    padding: 14px 40px;
+    background: var(--accent);
+    color: #0d1117;
+  }
+  #playGameBtn:hover { background: #82d4ff; }
+  #charSelectBtn { font-size: 14px; padding: 10px 28px; }
+  #viewCharsBtn { font-size: 14px; padding: 10px 28px; }
+
+  /* ---------- Character info screen ---------- */
+  #charInfoScreen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    width: 800px;
+    padding: 30px 20px;
+  }
+  #charInfoScreen h1 {
+    font-size: 26px;
+    margin: 0;
+  }
+  .char-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+    max-height: 420px;
+    overflow-y: auto;
+    padding: 4px 2px;
+  }
+  .char-info-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    background: #161b22;
+  }
+  .char-info-card .char-info-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .char-info-card .char-info-header .shape-swatch {
+    width: 28px;
+    height: 28px;
+    background: var(--text);
+  }
+  .char-info-card h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text);
+  }
+  .char-info-ability {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  .char-info-ability .ability-label {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .char-info-ability .ability-name {
+    font-style: italic;
+  }
+
+  /* ---------- Character select screen ---------- */
+  #charSelectScreen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 26px;
+    width: 800px;
+    padding: 40px 20px;
+  }
+  #charSelectScreen h1 {
+    font-size: 26px;
+    margin: 0;
+  }
+  .char-columns {
+    display: flex;
+    gap: 60px;
+  }
+  .char-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .char-column h2 {
+    font-size: 16px;
+    margin: 0;
+  }
+  .char-column.p1-col h2 { color: var(--p1); }
+  .char-column.p2-col h2 { color: var(--p2); }
+  .shape-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .shape-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: var(--arena);
+    border: 2px solid var(--wall);
+    border-radius: 10px;
+    padding: 14px;
+    width: 100px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.1s ease;
+  }
+  .shape-option:hover {
+    border-color: #545d68;
+    transform: translateY(-2px);
+  }
+  .shape-option.selected.p1-selected { border-color: var(--p1); }
+  .shape-option.selected.p2-selected { border-color: var(--p2); }
+  .shape-option span {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .shape-swatch {
+    width: 36px;
+    height: 36px;
+  }
+  .shape-swatch.p1-color { background: var(--p1); }
+  .shape-swatch.p2-color { background: var(--p2); }
+  .shape-swatch.shape-circle { border-radius: 50%; }
+  .shape-swatch.shape-square { border-radius: 4px; }
+  .shape-swatch.shape-triangle {
+    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  }
+  .shape-swatch.shape-rhombus {
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  }
+  .shape-swatch.shape-star {
+    clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  }
+  .shape-swatch.shape-random {
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: #0d1117;
+    opacity: 0.85;
+  }
+  .shape-option[data-shape="random"] {
+    grid-column: span 2;
+  }
+  #charBackBtn {
+    font-size: 13px;
+  }
+  .char-select-buttons {
+    display: flex;
+    gap: 12px;
+  }
+  #startGameBtn {
+    font-size: 14px;
+    padding: 10px 28px;
+    background: var(--accent);
+    color: #0d1117;
+  }
+  #startGameBtn:hover { background: #82d4ff; }
+
+  /* ---------- Game screen ---------- */
+  #gameScreen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 800px;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 22px;
+    min-width: 0;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .legend span.key {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .legend .p1 span.key { color: var(--p1); }
+  .legend .p2 span.key { color: var(--p2); }
+
+  .scoreboard {
+    display: flex;
+    gap: 20px;
+    width: 800px;
+    justify-content: center;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .scoreboard .p1 { color: var(--p1); font-weight: 600; }
+  .scoreboard .p2 { color: var(--p2); font-weight: 600; }
+
+  #pauseBtn {
+    padding: 8px 16px;
+    font-size: 13px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .canvas-wrap {
+    position: relative;
+  }
+  canvas {
+    background: var(--arena);
+    border: 2px solid var(--wall);
+    border-radius: 6px;
+    display: block;
+    outline: none;
+  }
+
+  /* ---------- Pause overlay ---------- */
+  #pauseOverlay {
+    display: none;
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(13, 17, 23, 0.82);
+    border-radius: 6px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+  }
+  #pauseOverlay .pause-title {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  #pauseOverlay .pause-buttons {
+    display: flex;
+    gap: 14px;
+  }
+  #resumeBtn {
+    background: var(--accent);
+    color: #0d1117;
+  }
+  #resumeBtn:hover { background: #82d4ff; }
+</style>
+</head>
+<body>
+
+<!-- ================= HOME SCREEN ================= -->
+<div id="homeScreen">
+  <div></div>
+  <div style="text-align:center;">
+    <h1>Sorcery Brawl</h1>
+    <div class="subtitle">by Eitan Nahari</div>
+  </div>
+  <div class="home-buttons">
+    <button id="playGameBtn">Play Game</button>
+    <button id="onlineGameBtn">Online Multiplayer</button>
+    <button id="viewCharsBtn">View Characters</button>
+  </div>
+</div>
+
+<!-- ================= CHARACTER INFO SCREEN ================= -->
+<div id="charInfoScreen">
+  <h1>Sorcerers</h1>
+  <div class="char-info-grid">
+    <div class="char-info-card">
+      <div class="char-info-header">
+        <div class="shape-swatch shape-circle"></div>
+        <h3>Gojo</h3>
+      </div>
+      <div class="char-info-ability"><span class="ability-label">Attack</span> — <span class="ability-name">Red</span>: Tap for a quick shot, or hold to charge it into a bigger, stronger one. It homes in on the enemy as it flies.</div>
+      <div class="char-info-ability"><span class="ability-label">Ability</span> — <span class="ability-name">Blue</span>: A slow-moving orb that drags in anyone who touches it and holds them there until it fades.</div>
+      <div class="char-info-ability"><span class="ability-label">Super</span> — <span class="ability-name">Purple</span>: An unstoppable shot with no limit to its range that shatters any wall in its path.</div>
+    </div>
+    <div class="char-info-card">
+      <div class="char-info-header">
+        <div class="shape-swatch shape-square"></div>
+        <h3>Choso</h3>
+      </div>
+      <div class="char-info-ability"><span class="ability-label">Attack</span> — <span class="ability-name">Piercing Blood</span>: Fires a steady stream of shots while held — but hold it too long and it overheats.</div>
+      <div class="char-info-ability"><span class="ability-label">Ability</span> — <span class="ability-name">Flowing Scale</span>: Toughens his skin for a few seconds, reducing incoming damage.</div>
+      <div class="char-info-ability"><span class="ability-label">Super</span> — <span class="ability-name">Wave</span>: A wide barrier that grows outward from him, pushing and trapping anyone caught inside it.</div>
+    </div>
+    <div class="char-info-card">
+      <div class="char-info-header">
+        <div class="shape-swatch shape-triangle"></div>
+        <h3>Naoya</h3>
+      </div>
+      <div class="char-info-ability"><span class="ability-label">Attack</span> — <span class="ability-name">Dash</span>: A quick burst forward that strikes anyone caught in its path.</div>
+      <div class="char-info-ability"><span class="ability-label">Ability</span> — <span class="ability-name">Freezeframe</span>: Freezes anyone at point-blank range for a moment — hit them again while frozen to send them flying.</div>
+      <div class="char-info-ability"><span class="ability-label">Super</span> — <span class="ability-name">Supersonic</span>: A burst of speed that builds the longer he keeps moving, letting him smash through walls and slam into his opponent.</div>
+    </div>
+    <div class="char-info-card">
+      <div class="char-info-header">
+        <div class="shape-swatch shape-rhombus"></div>
+        <h3>Sukuna</h3>
+      </div>
+      <div class="char-info-ability"><span class="ability-label">Attack</span> — <span class="ability-name">Dismantle</span>: A fast slashing strike that lands at a slightly random angle.</div>
+      <div class="char-info-ability"><span class="ability-label">Ability</span> — <span class="ability-name">Cleave</span>: A heavy close-range strike that can be used several times in a row before it needs to recharge.</div>
+      <div class="char-info-ability"><span class="ability-label">Super</span> — <span class="ability-name">Furnace</span>: A slow-moving explosive that levels nearby walls and leaves anyone caught in the blast burning.</div>
+    </div>
+    <div class="char-info-card">
+      <div class="char-info-header">
+        <div class="shape-swatch shape-star"></div>
+        <h3>Megumi</h3>
+      </div>
+      <div class="char-info-ability"><span class="ability-label">Attack</span> — <span class="ability-name">Strike</span>: A short-range hit for 20 damage.</div>
+      <div class="char-info-ability"><span class="ability-label">Ability</span> — <span class="ability-name">Shikigami</span>: Summons a shikigami that hunts down enemies. Divine Dogs deal damage up close, Nue deals damage and briefly stuns its target, and Rabbit Escape sends out a swarm of harmless rabbits. Only one of each shikigami type can be active for Megumi at a time, and recasting replaces the existing one.</div>
+      <div class="char-info-ability"><span class="ability-label">Super</span> — <span class="ability-name">Mahoraga</span>: Summons a pet with its own 200 health that hunts the enemy down and hits hard at point-blank range — but costs Megumi almost everything, leaving him at 1 health. The pet fights on his behalf as its own separate target — it doesn't shield him, so he's still one hit away from losing the round the whole time it's out. It does adapt to whatever's hitting it, taking less damage from the same attack each time it lands.</div>
+    </div>
+  </div>
+  <button id="charInfoBackBtn">Back</button>
+</div>
+
+<!-- ================= CHARACTER SELECT SCREEN ================= -->
+<div id="charSelectScreen">
+  <h1>Choose Your Character</h1>
+  <div class="char-columns">
+    <div class="char-column p1-col">
+      <h2>Player 1</h2>
+      <div class="shape-grid" data-player="1">
+        <button class="shape-option" data-shape="circle">
+          <div class="shape-swatch p1-color shape-circle"></div><span>Gojo</span>
+        </button>
+        <button class="shape-option" data-shape="square">
+          <div class="shape-swatch p1-color shape-square"></div><span>Choso</span>
+        </button>
+        <button class="shape-option" data-shape="triangle">
+          <div class="shape-swatch p1-color shape-triangle"></div><span>Naoya</span>
+        </button>
+        <button class="shape-option" data-shape="rhombus">
+          <div class="shape-swatch p1-color shape-rhombus"></div><span>Sukuna</span>
+        </button>
+        <button class="shape-option" data-shape="star">
+          <div class="shape-swatch p1-color shape-star"></div><span>Megumi</span>
+        </button>
+        <button class="shape-option" data-shape="random">
+          <div class="shape-swatch p1-color shape-random">?</div><span>Random</span>
+        </button>
+      </div>
+    </div>
+    <div class="char-column p2-col">
+      <h2>Player 2</h2>
+      <div class="shape-grid" data-player="2">
+        <button class="shape-option" data-shape="circle">
+          <div class="shape-swatch p2-color shape-circle"></div><span>Gojo</span>
+        </button>
+        <button class="shape-option" data-shape="square">
+          <div class="shape-swatch p2-color shape-square"></div><span>Choso</span>
+        </button>
+        <button class="shape-option" data-shape="triangle">
+          <div class="shape-swatch p2-color shape-triangle"></div><span>Naoya</span>
+        </button>
+        <button class="shape-option" data-shape="rhombus">
+          <div class="shape-swatch p2-color shape-rhombus"></div><span>Sukuna</span>
+        </button>
+        <button class="shape-option" data-shape="star">
+          <div class="shape-swatch p2-color shape-star"></div><span>Megumi</span>
+        </button>
+        <button class="shape-option" data-shape="random">
+          <div class="shape-swatch p2-color shape-random">?</div><span>Random</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div id="onlineReadyStatus" style="display:none; margin:12px auto; padding:10px 16px; max-width:560px; text-align:center; border-radius:10px; background:rgba(255,255,255,.08);">Waiting for both players to choose a character and ready up.</div>
+  <div class="char-select-buttons">
+    <button id="charBackBtn">Back</button>
+    <button id="startGameBtn">Start Game</button>
+  </div>
+</div>
+
+<!-- ================= GAME SCREEN ================= -->
+<div id="gameScreen">
+  <div class="topbar">
+    <div class="legend">
+      <div class="p1">Player 1 — <span class="key">WASD</span> move, <span class="key">V</span> attack, <span class="key">B</span> ability, <span class="key">N</span> super</div>
+      <div class="p2">Player 2 — <span class="key">WASD</span> move, <span class="key">V</span> attack, <span class="key">B</span> ability, <span class="key">N</span> super</div>
+    </div>
+    <button id="pauseBtn">Pause</button>
+  </div>
+
+  <div class="scoreboard">
+    <span class="p1" id="p1Score">Player 1 wins: 0</span>
+    <span class="p2" id="p2Score">Player 2 wins: 0</span>
+  </div>
+
+  <div class="canvas-wrap">
+    <canvas id="game" width="800" height="500" tabindex="0"></canvas>
+    <div id="pauseOverlay">
+      <div class="pause-title">Paused</div>
+      <div class="pause-buttons">
+        <button id="resumeBtn">Play</button>
+        <button id="resetRoundBtn">Reset Round</button>
+        <button id="homeBtn">Home</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------
+// Screen management
+// ---------------------------------------------------------------
+const homeScreen = document.getElementById('homeScreen');
+const charSelectScreen = document.getElementById('charSelectScreen');
+const charInfoScreen = document.getElementById('charInfoScreen');
+const gameScreen = document.getElementById('gameScreen');
+const playGameBtn = document.getElementById('playGameBtn');
+const onlineGameBtn = document.getElementById('onlineGameBtn');
+const viewCharsBtn = document.getElementById('viewCharsBtn');
+const charInfoBackBtn = document.getElementById('charInfoBackBtn');
+const startGameBtn = document.getElementById('startGameBtn');
+const charBackBtn = document.getElementById('charBackBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const pauseOverlay = document.getElementById('pauseOverlay');
+const resumeBtn = document.getElementById('resumeBtn');
+const resetRoundBtn = document.getElementById('resetRoundBtn');
+const homeBtn = document.getElementById('homeBtn');
+const p1ScoreEl = document.getElementById('p1Score');
+const p2ScoreEl = document.getElementById('p2Score');
+
+// Online multiplayer uses the Render WebSocket server. Each browser owns one
+// player slot. Both players use WASD + V/B/N, and inputs are tagged by the
+// connection/player slot so identical keys never control the other player.
+const ONLINE_WS_URL = 'wss://sorcery-brawl-multiplayer.onrender.com';
+let onlineMode = false;
+let onlineSocket = null;
+let onlinePlayerNumber = 0;
+let onlineRoom = '';
+let onlineConnected = false;
+let onlineOpponentConnected = false;
+let onlineReady = false;
+let onlineOpponentReady = false;
+let onlineMatchStarted = false;
+let onlineMegumiRequestSent = { 1:false, 2:false };
+let onlineRemoteKeys = { w:false, a:false, s:false, d:false };
+let onlineRemoteHeld = { v:false, b:false, n:false };
+let onlineLastStateSent = 0;
+let onlineRoundEndSent = false;
+let onlineRoundResetPending = false;
+// In online mode, the character selected on this browser is kept separately
+// from the Player objects so their local default shapes can never accidentally
+// become the online choice.
+let onlineSelectedShape = null;
+let onlineServerSelectedShape = null;
+const ONLINE_STATE_SEND_MS = 50;
+const onlineReadyStatus = document.getElementById('onlineReadyStatus');
+
+function onlineLocalPlayer() { return onlinePlayerNumber === 1 ? p1 : p2; }
+function onlineRemotePlayer() { return onlinePlayerNumber === 1 ? p2 : p1; }
+function onlineSend(message) {
+  if (!onlineSocket || onlineSocket.readyState !== WebSocket.OPEN) return;
+  onlineSocket.send(JSON.stringify(message));
+}
+function onlineSendInput(kind, key, value) {
+  if (!onlineMode || !onlineConnected || !onlineMatchStarted) return;
+  onlineSend({ type:'game', data:{ kind, key, value } });
+}
+function setOnlineReadyStatus(text) {
+  if (!onlineReadyStatus) return;
+  onlineReadyStatus.textContent = text;
+  onlineReadyStatus.style.display = onlineMode ? 'block' : 'none';
+}
+function enterOnlineCharacterSelect() {
+  showCharSelect();
+
+  // Online mode must show ONLY the local player's character choices.
+  // Player 1 sees the Player 1 column; Player 2 sees the Player 2 column.
+  // The old version always hid Player 2's column, which meant Player 2 was
+  // accidentally changing p1 while p2 stayed at its default shape (Choso).
+  const p1Col = document.querySelector('.p1-col');
+  const p2Col = document.querySelector('.p2-col');
+  const localNumber = onlinePlayerNumber || 1;
+
+  if (p1Col) p1Col.style.display = localNumber === 1 ? '' : 'none';
+  if (p2Col) p2Col.style.display = localNumber === 2 ? '' : 'none';
+
+  const heading = localNumber === 1
+    ? p1Col?.querySelector('h2')
+    : p2Col?.querySelector('h2');
+
+  if (heading) {
+    heading.textContent = `Player ${localNumber}`;
+  }
+
+  // Highlight the local player's current selection when the screen opens.
+  const local = onlineLocalPlayer();
+  if (!onlineSelectedShape) onlineSelectedShape = null;
+  const localGrid = document.querySelector(
+    `.shape-grid[data-player="${localNumber}"]`
+  );
+
+  if (localGrid && local) {
+    const currentShape = onlineSelectedShape || '';
+    localGrid.querySelectorAll('.shape-option').forEach(btn => {
+      btn.classList.remove('selected', 'p1-selected', 'p2-selected');
+    });
+    const currentButton = localGrid.querySelector(
+      `.shape-option[data-shape="${currentShape}"]`
+    );
+    if (currentButton) {
+      currentButton.classList.add(
+        'selected',
+        localNumber === 1 ? 'p1-selected' : 'p2-selected'
+      );
+    }
+  }
+
+  startGameBtn.textContent = onlineReady ? 'Ready ✓' : 'Ready';
+  startGameBtn.disabled = false;
+  setOnlineReadyStatus(onlineOpponentConnected
+    ? (onlineOpponentReady ? 'Both players are ready! Starting...' : 'Opponent is connected. Choose your character, then click Ready.')
+    : 'Connected. Waiting for your friend to join...');
+}
+function leaveOnlineRoom() {
+  if (onlineSocket) { try { onlineSocket.close(); } catch {} }
+  onlineSocket = null;
+  onlineMode = false;
+  onlineConnected = false;
+  onlineOpponentConnected = false;
+  onlineReady = false;
+  onlineOpponentReady = false;
+  onlineMatchStarted = false;
+  onlineMegumiRequestSent = { 1:false, 2:false };
+  onlineRoundEndSent = false;
+  onlineRoundResetPending = false;
+  onlineSelectedShape = null;
+  onlineServerSelectedShape = null;
+  onlinePlayerNumber = 0;
+  onlineRemoteKeys = { w:false, a:false, s:false, d:false };
+  onlineRemoteHeld = { v:false, b:false, n:false };
+  document.querySelector('.p1-col').style.display = '';
+  document.querySelector('.p2-col').style.display = '';
+  document.querySelector('.p1-col h2').textContent = 'Player 1';
+  startGameBtn.textContent = 'Start Game';
+  setOnlineReadyStatus('');
+}
+function connectOnline() {
+  if (onlineSocket && onlineSocket.readyState === WebSocket.OPEN) { enterOnlineCharacterSelect(); return; }
+  const room = prompt('Enter a room code. Share the same code with your friend:');
+  if (!room) return;
+  onlineRoom = room.trim();
+  if (!onlineRoom) return;
+  onlineMode = true;
+  onlineConnected = false;
+  onlineOpponentConnected = false;
+  onlineReady = false;
+  onlineOpponentReady = false;
+  onlineMatchStarted = false;
+  onlineMegumiRequestSent = { 1:false, 2:false };
+  onlineRoundEndSent = false;
+  onlineRoundResetPending = false;
+  onlineSelectedShape = null;
+  onlineServerSelectedShape = null;
+  onlinePlayerNumber = 0;
+  setOnlineReadyStatus('Connecting...');
+  onlineSocket = new WebSocket(ONLINE_WS_URL);
+  onlineSocket.addEventListener('open', () => {
+    onlineSend({ type:'join', room:onlineRoom });
+  });
+  onlineSocket.addEventListener('message', (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); } catch { return; }
+    if (msg.type === 'room-full') {
+      alert('That room already has two players. Try another room code.');
+      leaveOnlineRoom();
+      return;
+    }
+    if (msg.type === 'joined') {
+      onlinePlayerNumber = msg.playerNumber || (msg.players === 1 ? 1 : 2);
+      onlineServerSelectedShape = null;
+      onlineSelectedShape = null;
+      onlineConnected = true;
+      onlineOpponentConnected = msg.players >= 2;
+      enterOnlineCharacterSelect();
+      return;
+    }
+    if (msg.type === 'player-joined') {
+      onlineOpponentConnected = true;
+      setOnlineReadyStatus(onlineReady ? 'You are ready. Waiting for your opponent to ready up.' : 'Opponent joined. Choose your character, then click Ready.');
+      return;
+    }
+    if (msg.type === 'character-selected') {
+      if (Number(msg.playerNumber) === onlinePlayerNumber) {
+        onlineServerSelectedShape = msg.shape;
+        onlineSelectedShape = msg.shape;
+      }
+      return;
+    }
+    if (msg.type === 'ready-state') {
+      onlineOpponentReady = !!msg.opponentReady;
+      if (onlineOpponentReady && onlineReady) setOnlineReadyStatus('Both players are ready! Starting...');
+      else if (onlineOpponentReady) setOnlineReadyStatus('Your opponent is ready. Click Ready when you are ready.');
+      else if (onlineReady) setOnlineReadyStatus('You are ready. Waiting for your opponent...');
+      else setOnlineReadyStatus('Choose your character, then click Ready.');
+      return;
+    }
+    if (msg.type === 'megumi-pet-type') {
+      const targetPlayer = msg.playerNumber === 1 ? p1 : p2;
+      if (targetPlayer) {
+        targetPlayer.megumiNextPetType = msg.petType;
+        targetPlayer.megumiAbilityReady = true;
+        targetPlayer.megumiAbilityChargeStart = performance.now();
+      }
+      onlineMegumiRequestSent[msg.playerNumber] = true;
+      return;
+    }
+    if (msg.type === 'round-end') {
+      const winnerNumber = Number(msg.winnerNumber);
+      if (winnerNumber !== 1 && winnerNumber !== 2) return;
+      const winner = winnerNumber === 1 ? p1 : p2;
+      if (!roundOver) {
+        roundOver = true;
+        winner.score += 1;
+        updateScoreboard();
+        winBanner = { player: winner, timeLeft: WIN_BANNER_DURATION };
+        for (const k of trackedKeys) keys[k] = false;
+      }
+      return;
+    }
+    if (msg.type === 'round-reset') {
+      const myShape = onlinePlayerNumber === 1 ? msg.p1Shape : msg.p2Shape;
+      const enemyShape = onlinePlayerNumber === 1 ? msg.p2Shape : msg.p1Shape;
+      const myRandom = onlinePlayerNumber === 1 ? !!msg.p1Random : !!msg.p2Random;
+      const enemyRandom = onlinePlayerNumber === 1 ? !!msg.p2Random : !!msg.p1Random;
+      if (myShape && ABILITY_NAMES[myShape]) { onlineLocalPlayer().shape = myShape; onlineLocalPlayer().useRandomShape = false; onlineSelectedShape = myRandom ? 'random' : myShape; onlineServerSelectedShape = onlineSelectedShape; }
+      if (enemyShape && ABILITY_NAMES[enemyShape]) { onlineRemotePlayer().shape = enemyShape; onlineRemotePlayer().useRandomShape = false; }
+      onlineMegumiRequestSent = { 1:false, 2:false };
+      updateLegend();
+      resetRound();
+      return;
+    }
+    if (msg.type === 'match-start') {
+      onlineMatchStarted = true;
+      onlineLastStateSent = 0;
+      onlineRoundEndSent = false;
+      onlineRoundResetPending = false;
+      const myShape = onlinePlayerNumber === 1 ? msg.p1Shape : msg.p2Shape;
+      const enemyShape = onlinePlayerNumber === 1 ? msg.p2Shape : msg.p1Shape;
+      const myRandom = onlinePlayerNumber === 1 ? !!msg.p1Random : !!msg.p2Random;
+      const enemyRandom = onlinePlayerNumber === 1 ? !!msg.p2Random : !!msg.p1Random;
+      if (myShape && ABILITY_NAMES[myShape]) {
+        onlineLocalPlayer().shape = myShape;
+        onlineLocalPlayer().useRandomShape = false;
+        onlineSelectedShape = myRandom ? 'random' : myShape;
+        onlineServerSelectedShape = onlineSelectedShape;
+      }
+      if (enemyShape && ABILITY_NAMES[enemyShape]) {
+        onlineRemotePlayer().shape = enemyShape;
+        onlineRemotePlayer().useRandomShape = false;
+      }
+      onlineMegumiRequestSent = { 1:false, 2:false };
+      updateLegend();
+      resetRound();
+      showGame();
+      return;
+    }
+    if (msg.type === 'game' && msg.data && msg.data.kind === 'state') {
+      const d = msg.data;
+      const remote = onlineRemotePlayer();
+      if (!remote) return;
+      if (Number.isFinite(d.x)) remote.x = d.x;
+      if (Number.isFinite(d.y)) remote.y = d.y;
+      if (d.lastDir && Number.isFinite(d.lastDir.x) && Number.isFinite(d.lastDir.y)) {
+        remote.lastDir = { x:d.lastDir.x, y:d.lastDir.y };
+      }
+      return;
+    }
+    if (msg.type === 'game' && msg.data && msg.data.kind === 'damage') {
+      const d = msg.data;
+      if (Number(d.targetPlayerNumber) !== onlinePlayerNumber) return;
+      const local = onlineLocalPlayer();
+      if (!local || !Number.isFinite(d.amount) || d.amount <= 0) return;
+      damageEnemy(onlineRemotePlayer(), local, d.amount, d.attackType || 'attack', true);
+      if (local.health <= 0) handleRoundWin(onlineRemotePlayer(), local);
+      return;
+    }
+    if (msg.type === 'player-left') {
+      onlineOpponentConnected = false;
+      onlineOpponentReady = false;
+      onlineMatchStarted = false;
+      onlineRemoteKeys = { w:false, a:false, s:false, d:false };
+      onlineRemoteHeld = { v:false, b:false, n:false };
+      roundOver = false;
+      winBanner = null;
+      projectiles.length = 0;
+      furnaceShots.length = 0;
+      pullOrbs.length = 0;
+      showCharSelect();
+      enterOnlineCharacterSelect();
+      setOnlineReadyStatus('Your opponent disconnected. Waiting for another player...');
+      return;
+    }
+    if (msg.type === 'game' && msg.data && msg.data.kind === 'input') {
+      const d = msg.data;
+      if (d.key in onlineRemoteKeys) onlineRemoteKeys[d.key] = !!d.value;
+      if (d.key in onlineRemoteHeld) {
+        const was = onlineRemoteHeld[d.key];
+        onlineRemoteHeld[d.key] = !!d.value;
+        if (d.value && !was && onlineMatchStarted) {
+          const remote = onlineRemotePlayer();
+          const target = getNearestEnemy(remote) || (remote === p1 ? p2 : p1);
+          if (d.key === 'v') handleShootKeyDown(remote, target);
+          if (d.key === 'b') handleSpecialKeyDown(remote, target);
+          if (d.key === 'n') handleSuperKeyDown(remote, target);
+        }
+        if (!d.value && was && d.key === 'v' && onlineMatchStarted) handleShootKeyUp(onlineRemotePlayer());
+      }
+    }
+  });
+  onlineSocket.addEventListener('close', () => {
+    onlineConnected = false;
+  });
+  onlineSocket.addEventListener('error', () => {
+    alert('Could not connect to the multiplayer server.');
+  });
+}
+
+onlineGameBtn.addEventListener('click', connectOnline);
+
+function showHome() {
+  if (onlineMode) leaveOnlineRoom();
+  homeScreen.style.display = 'flex';
+  charSelectScreen.style.display = 'none';
+  charInfoScreen.style.display = 'none';
+  gameScreen.style.display = 'none';
+  isPaused = false;
+  pauseOverlay.style.display = 'none';
+  p1.score = 0;
+  p2.score = 0;
+  updateScoreboard();
+  resetRound();
+}
+
+function showCharSelect() {
+  homeScreen.style.display = 'none';
+  charSelectScreen.style.display = 'flex';
+  charInfoScreen.style.display = 'none';
+  gameScreen.style.display = 'none';
+}
+
+function showCharInfo() {
+  homeScreen.style.display = 'none';
+  charSelectScreen.style.display = 'none';
+  charInfoScreen.style.display = 'flex';
+  gameScreen.style.display = 'none';
+}
+
+function showGame() {
+  homeScreen.style.display = 'none';
+  charSelectScreen.style.display = 'none';
+  charInfoScreen.style.display = 'none';
+  gameScreen.style.display = 'flex';
+  canvas.focus();
+}
+
+playGameBtn.addEventListener('click', showCharSelect);
+viewCharsBtn.addEventListener('click', showCharInfo);
+charInfoBackBtn.addEventListener('click', showHome);
+startGameBtn.addEventListener('click', () => {
+  if (onlineMode) {
+    if (!onlineConnected) return;
+    if (onlineReady) return;
+    if (!onlineSelectedShape) {
+      setOnlineReadyStatus('Choose a character first, then click Ready.');
+      return;
+    }
+    const local = onlineLocalPlayer();
+    const selectedShape = onlineServerSelectedShape;
+    if (!selectedShape) {
+      setOnlineReadyStatus('Choose a character first, then click Ready.');
+      return;
+    }
+    onlineReady = true;
+    startGameBtn.textContent = 'Ready ✓';
+    startGameBtn.disabled = true;
+    setOnlineReadyStatus(onlineOpponentReady ? 'Both players are ready! Starting...' : 'You are ready. Waiting for your opponent...');
+    // The server resolves Random exactly once so both computers receive the same character.
+    onlineSend({ type:'ready', shape:selectedShape });
+    return;
+  }
+  resolveRandomShapes();
+  resetRound(); // starts the Super unlock timers from the actual match start
+  showGame();
+});
+charBackBtn.addEventListener('click', () => {
+  if (onlineMode) leaveOnlineRoom();
+  showHome();
+});
+
+// ---------------------------------------------------------------
+// Character selection
+// ---------------------------------------------------------------
+// Named abilities per character, shown in the in-game legend.
+const ABILITY_NAMES = {
+  circle: { main: 'Red', secondary: 'Blue', super: 'Purple' },
+  square: { main: 'Piercing Blood', secondary: 'Flowing Scale', super: 'Wave' },
+  triangle: { main: 'Dash', secondary: 'Freezeframe', super: 'Supersonic' },
+  rhombus: { main: 'Dismantle', secondary: 'Cleave', super: 'Furnace' },
+  star: { main: 'Strike', secondary: 'Shikigami', super: 'Mahoraga' },
+};
+
+function updateLegend() {
+  const p1El = document.querySelector('.legend .p1');
+  const p2El = document.querySelector('.legend .p2');
+  if (!p1El || !p2El) return; // p1/p2 not created yet on first call
+
+  if (p1.useRandomShape) {
+    p1El.innerHTML = `Player 1 — <span class="key">WASD</span> move, sorcerer picked at random on load`;
+  } else {
+    const n1 = ABILITY_NAMES[p1.shape];
+    if (!n1.main) {
+      p1El.innerHTML = `Player 1 — <span class="key">WASD</span> move (abilities not yet defined)`;
+    } else {
+      p1El.innerHTML = `Player 1 — <span class="key">WASD</span> move, <span class="key">V</span> ${n1.main}` +
+        (n1.secondary ? `, <span class="key">B</span> ${n1.secondary}` : '') +
+        (n1.super ? `, <span class="key">N</span> ${n1.super}` : '');
+    }
+  }
+
+  if (p2.useRandomShape) {
+    p2El.innerHTML = `Player 2 — <span class="key">Arrow Keys</span> move, sorcerer picked at random on load`;
+  } else {
+    const n2 = ABILITY_NAMES[p2.shape];
+    if (!n2.main) {
+      p2El.innerHTML = `Player 2 — <span class="key">Arrow Keys</span> move (abilities not yet defined)`;
+    } else {
+      p2El.innerHTML = `Player 2 — <span class="key">Arrow Keys</span> move, <span class="key">J</span> ${n2.main}` +
+        (n2.secondary ? `, <span class="key">K</span> ${n2.secondary}` : '') +
+        (n2.super ? `, <span class="key">L</span> ${n2.super}` : '');
+    }
+  }
+}
+
+function selectShape(playerNum, shape) {
+  const player = playerNum === 1 ? p1 : p2;
+
+  // Online mode: this browser may ONLY select its own player.
+  if (onlineMode) {
+    if (playerNum !== onlinePlayerNumber || onlineReady) return;
+
+    if (!['circle','square','triangle','rhombus','star','random'].includes(shape)) return;
+
+    // Keep the online choice completely separate from the normal local-game defaults.
+    onlineSelectedShape = shape;
+    onlineServerSelectedShape = shape;
+
+    if (shape === 'random') {
+      player.useRandomShape = true;
+      // Do NOT leave the old/default shape (Choso) as the online selection.
+    } else {
+      player.useRandomShape = false;
+      player.shape = shape;
+    }
+
+    // Tell the server immediately which character this browser selected.
+    onlineSend({ type: 'select-character', shape });
+  } else {
+    if (shape === 'random') {
+      player.useRandomShape = true;
+    } else {
+      player.useRandomShape = false;
+      player.shape = shape;
+    }
+  }
+
+  const grid = document.querySelector(`.shape-grid[data-player="${playerNum}"]`);
+  if (!grid) return;
+
+  grid.querySelectorAll('.shape-option').forEach(btn => {
+    btn.classList.remove('selected', 'p1-selected', 'p2-selected');
+  });
+
+  const chosenBtn = grid.querySelector(`.shape-option[data-shape="${shape}"]`);
+  if (chosenBtn) {
+    chosenBtn.classList.add(
+      'selected',
+      playerNum === 1 ? 'p1-selected' : 'p2-selected'
+    );
+  }
+
+  updateLegend();
+}
+
+
+document.querySelectorAll('.shape-grid').forEach(grid => {
+  const playerNum = parseInt(grid.dataset.player, 10);
+  grid.querySelectorAll('.shape-option').forEach(btn => {
+    btn.addEventListener('click', () => selectShape(playerNum, btn.dataset.shape));
+  });
+});
+
+// Rolls a real shape for anyone with "Random" selected, right as the game loads.
+function randomShape() {
+  return SPECIAL_SHAPES[Math.floor(Math.random() * SPECIAL_SHAPES.length)];
+}
+
+function resolveRandomShapes() {
+  if (p1.useRandomShape) p1.shape = randomShape();
+  if (p2.useRandomShape) p2.shape = randomShape();
+  updateLegend();
+}
+
+// ---------------------------------------------------------------
+// Pause handling
+// ---------------------------------------------------------------
+let isPaused = false;
+
+function pauseGame() {
+  isPaused = true;
+  pauseOverlay.style.display = 'flex';
+  p1.charging = false;
+  p2.charging = false;
+  p1.dashing = false;
+  p2.dashing = false;
+  p1.holdStartTime = null;
+  p2.holdStartTime = null;
+}
+
+function resumeGame() {
+  isPaused = false;
+  pauseOverlay.style.display = 'none';
+  canvas.focus();
+}
+
+pauseBtn.addEventListener('click', pauseGame);
+resumeBtn.addEventListener('click', resumeGame);
+resetRoundBtn.addEventListener('click', () => {
+  resetRound();
+  roundOver = false;
+  winBanner = null;
+  resumeGame();
+});
+homeBtn.addEventListener('click', showHome);
+
+// ---------------------------------------------------------------
+// Game setup
+// ---------------------------------------------------------------
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+const W = canvas.width, H = canvas.height;
+// Base health used as a fallback; actual max health is per-character (see below).
+const MAX_HEALTH = 150;
+// Gojo, Choso, Naoya, and Sukuna share the 150 baseline; Megumi is tuned lower.
+const MAX_HEALTH_BY_SHAPE = {
+  circle: 150,   // Gojo
+  square: 150,   // Choso
+  triangle: 150, // Naoya
+  rhombus: 150,  // Sukuna
+  star: 150,     // Megumi
+};
+const SHOT_DAMAGE = 25;
+const SHOT_COOLDOWN = 500; // ms between shots
+const PROJECTILE_SPEED = 6;
+const PROJECTILE_RADIUS = 5;
+const SLASH_DAMAGE = 8; // toned down — Sukuna hit too hard
+const SLASH_HIT_RADIUS = 22;
+const SLASH_LENGTH = 42;
+const SLASH_THICKNESS = 7;
+const SLASH_COOLDOWN = 180; // ms between slashes, much faster than a normal shot
+const SLASH_TILT_DEG = 35; // Dismantle randomly slants left or right by this much
+const CIRCLE_MIN_DAMAGE = 10;
+const CIRCLE_MAX_DAMAGE = 30;
+const CIRCLE_MAX_CHARGE_MS = 2500;
+const CIRCLE_MIN_RADIUS = 5;
+const CIRCLE_MAX_RADIUS = 14;
+const DASH_SPEED = 11;
+const DASH_DURATION = 220; // ms
+const DASH_DAMAGE = 25;
+const DASH_COOLDOWN = 350; // ms
+const DASH_STILL_THRESHOLD = 250; // ms of no movement before auto-aim kicks in
+const SQUARE_DAMAGE = 1;
+const SQUARE_FIRE_RATE = 45; // ms between stream shots (lower = closer together)
+const SQUARE_PROJECTILE_SPEED = 9; // faster than a normal shot
+const SQUARE_PROJECTILE_RADIUS = 5; // hit radius — small bump to match the wider visual below
+const SQUARE_PROJECTILE_VISUAL_LENGTH = 18; // Piercing Blood is drawn as a wide streak, not a dot
+const SQUARE_PROJECTILE_VISUAL_WIDTH = 9;
+const SQUARE_OVERHEAT_THRESHOLD = 3000; // ms of continuous holding before overheating
+const SQUARE_OVERHEAT_COOLDOWN = 2000; // ms cooldown once overheated
+const WIN_BANNER_DURATION = 3000; // ms
+
+// Secondary ability (E / U): currently only Gojo has one implemented — a
+// slow-moving orb that pulls the enemy in and hits them for chip damage.
+// Other shapes will get their own secondary abilities later.
+const SPECIAL_COOLDOWN = 4000; // ms
+const PULL_DAMAGE = 5;
+const PULL_ORB_SPEED = 5;
+const PULL_ORB_RADIUS = 16;
+const PULL_MAX_RANGE = W / 2; // half the width of the screen
+const PULL_LINGER_MS = 750; // how long the orb sits at max range before vanishing
+const PULL_TRIGGER_RADIUS = 160; // how close the enemy must get to be pulled in
+const PULL_STRENGTH = 2; // px per frame the enemy is dragged toward the orb
+const SPECIAL_SHAPES = ['circle', 'rhombus', 'square', 'triangle', 'star'];
+const MEGUMI_ABILITY_CHARGE_MS = 5000;
+const MEGUMI_PET_TYPES = [1, 2, 3];
+const DIVINE_DOG_DURATION = 8000;
+const NUE_ATTACK_COOLDOWN = 1400; // slower attack speed
+const NUE_STUN_DURATION = 250;
+const NUE_DURATION = 5000;
+let activePets = [];
+
+
+// Choso's secondary: Flowing Scale — a 3-second window where he takes half damage.
+const SCALE_DURATION = 3000;
+const SCALE_REDUCTION = 0.5; // incoming damage is multiplied by this while active
+const SCALE_COOLDOWN = 8000; // ms between uses
+
+// Naoya's secondary: Freezeframe — a very short-range freeze. A frozen enemy
+// can't move or attack for 1.5s; dashing into them while frozen knocks them
+// flying, and slamming into a wall costs them extra health.
+const FREEZE_RANGE = 34; // beyond both players' sizes, so it's a point-blank hit
+const FREEZE_DURATION = 1500; // ms
+const FREEZE_COOLDOWN = 6000; // ms
+const KNOCKBACK_SPEED = 9; // px per frame
+const KNOCKBACK_DISTANCE = 220; // how far the knockback carries before petering out
+const KNOCKBACK_WALL_DAMAGE = 10; // extra damage to the PLAYER who slams into the wall
+const FREEZEFRAME_WALL_DAMAGE = 1; // damage to the WALL tile they slam into
+
+const CLEAVE_DAMAGE = 27;
+const CLEAVE_MAX_CHARGES = 3;
+const CLEAVE_COOLDOWN = 8000; // ms, once all charges are used up
+const CLEAVE_WALL_DAMAGE = 10;
+
+const DISMANTLE_WALL_DAMAGE = 4; // Sukuna's slash chips a wall it hits
+const RED_HOMING_TURN_RATE = 0.022; // radians/frame Red steers toward its target — a gentle homing nudge
+
+// Gojo's Super (Purple): locked for the first 11s of a round, unlimited range,
+// shatters any wall tile it passes through outright, and hits for 70 damage.
+// Using it also kicks off Red's and Blue's cooldowns, plus its own 10s cooldown.
+// Visually it's rendered in the caster's own color, not an actual purple.
+const PURPLE_DAMAGE = 70;
+const PURPLE_PROJECTILE_SPEED = PROJECTILE_SPEED;
+const PURPLE_PROJECTILE_RADIUS = 44; // twice the player's own size (16)
+const SUPER_UNLOCK_TIME = 11000; // ms after round start before Purple/Furnace/Wave can be used
+const NAOYA_SUPERSONIC_UNLOCK_TIME = 5000; // ms after round start — Supersonic unlocks earlier than the others
+const PURPLE_COOLDOWN = 10000; // ms
+
+// Choso's Super: Wave. A wide bar that starts flush against him, facing
+// wherever the enemy was standing at the moment it's cast, then grows
+// forward until it reaches half the arena — after which it just holds there
+// for the rest of its duration. It passes straight through walls, but
+// constantly shoves anyone it's touching further along its direction of
+// travel; if that shove would run them into a wall (or the arena edge),
+// they simply stop there (still locked, since they're still touching the
+// wave) and start taking damage every 0.5s for as long as they're pinned.
+// Contact itself also deals a one-time 20 damage. Choso himself can't move
+// or attack while it's out, but Flowing Scale still works. Locked for the
+// first 11s of a round, then a 10s cooldown once the wave ends.
+const CHOSO_WAVE_DURATION = 2500; // ms the wave (and Choso's self-lock) lasts, start to end
+const CHOSO_WAVE_GROWTH_TIME = 600; // ms to grow from 0 to full range; holds there after
+const CHOSO_WAVE_RANGE = W / 2; // max forward length
+const CHOSO_WAVE_WIDTH = 132; // 1.5x its original width (was 2x Purple's old radius of 22)
+const CHOSO_WAVE_DAMAGE = 30; // dealt once, the moment it first touches the enemy
+const CHOSO_WAVE_COOLDOWN = 10000; // ms, starts once the wave ends (not on activation)
+const CHOSO_WAVE_PUSH_SPEED = 4; // px/frame the enemy is shoved along the wave's direction
+const CHOSO_WAVE_LOCK_REFRESH = 150; // ms an enemy's movement lock persists past their last frame of contact
+const CHOSO_WAVE_PIN_TICK_INTERVAL = 500; // ms between damage ticks while pushed against a wall/edge
+const CHOSO_WAVE_PIN_TICK_DAMAGE = 7; // damage per tick while pinned
+
+// Naoya's Super: a self speed buff. Starts as a small boost, ramps up the
+// longer he keeps moving, and hits a max-speed tier that shatters any wall
+// he runs into. Ends after 8s total, or after standing still for 1s. Locked
+// for the first 5s of a round (earlier than the others), then a 10s cooldown once the
+// buff itself ends. Naoya can still attack or use his ability during the Super;
+// either action immediately ends the Super, and the attack/ability still happens.
+const NAOYA_SUPER_DURATION = 8000; // ms, buff auto-expires after this long
+const NAOYA_SUPER_STOP_GRACE = 250; // ms of standing still before the ramp resets
+const NAOYA_SUPER_RAMP_TIME = 3000; // ms to ramp from start to max speed
+const NAOYA_SUPER_START_MULT = 1.1;
+const NAOYA_SUPER_MAX_MULT = 2.5; // reached at NAOYA_SUPER_RAMP_TIME, then holds flat
+const NAOYA_SUPER_COOLDOWN = 10000; // ms, starts once the buff ends (not on activation)
+const NAOYA_SUPER_BASE_DAMAGE = 5; // scaled by his current speed multiplier on contact
+const NAOYA_SUPER_HIT_COOLDOWN = 450; // ms between contact-damage ticks
+
+// Sukuna's Super: Furnace. A slow, heavy projectile that explodes on the
+// first thing it touches (enemy or wall) — instantly destroying every wall
+// tile within its blast radius, and if the enemy is caught in that same
+// radius, hitting them for a big upfront burst plus a burn that ticks for a
+// while after. The burn also carries a mild slow that lasts exactly as long
+// as the burn does. Locked for the first 11s of a round, then a 10s cooldown.
+const FURNACE_COOLDOWN = 10000; // ms
+// Impact damage and burn duration both scale with how far the enemy was
+// from the blast center at the moment of explosion: a dead-center hit does
+// the most upfront damage and the full burn, while someone only clipped at
+// the edge of the splash takes a small hit and just a single tick of fire.
+const FURNACE_IMPACT_DAMAGE_CENTER = 45; // dealt immediately, at the blast center
+const FURNACE_IMPACT_DAMAGE_EDGE = 8; // dealt immediately, at the edge of the splash radius
+const FURNACE_BURN_DURATION_CENTER = 5000; // ms, burn (and its slow) at the blast center
+const FURNACE_BURN_DURATION_EDGE = 1000; // ms, burn at the edge of the splash radius (one tick)
+const FURNACE_BURN_TICK_INTERVAL = 1000; // ms between burn ticks
+const FURNACE_BURN_TICK_DAMAGE = 4; // damage per tick
+const FURNACE_SLOW_FACTOR = 0.925; // 7.5% slow while burning
+const FURNACE_PROJECTILE_SPEED = PROJECTILE_SPEED;
+const FURNACE_PROJECTILE_RADIUS = 20; // visual size and hit radius on the direct target
+const FURNACE_SPLASH_RADIUS = 80; // blast radius for one-shotting walls / catching the enemy
+
+// Megumi's attack: a short-range strike for 20 damage.
+const MEGUMI_STRIKE_DAMAGE = 20;
+const MEGUMI_STRIKE_RANGE = 30; // slightly more reach for Megumi's close-range strike
+const CLEAVE_RANGE = 22; // Cleave is a shorter-range close-quarters strike
+const MEGUMI_STRIKE_COOLDOWN = 500; // ms, same cadence as a normal shot
+
+// Megumi's Super: Mahoraga. Summons a pet — an eight-spoked wheel — with its
+// own 200 health that chases the enemy down and hits for 20 at point-blank
+// range. Casting it costs Megumi almost everything: he's left at 1 health.
+// The pet is a separate target in its own right — it does NOT shield Megumi
+// from anything; attacks that land on him still hurt him directly, even
+// while it's out. It also "adapts": the first time a given named attack
+// lands on it, that same attack does 5% less the next time it lands, 10%
+// less the time after that, and so on, stacking without limit — but that
+// adaptation is specific to that one attack, so a different attack still
+// lands at full strength the first time it tries. The pet itself does not
+// adapt anyone to anything; it's purely on the receiving end.
+const MAHORAGA_HEALTH = 200;
+const MAHORAGA_SIZE = 20; // for drawing + collision — bigger than a player
+const MAHORAGA_SPEED = 1.8; // px/frame it chases the enemy — slower than a player
+const MAHORAGA_CONTACT_RANGE = 30; // point-blank
+const MAHORAGA_CONTACT_DAMAGE = 20; // Mahoraga deals exactly 20 damage per contact hit.
+const MAHORAGA_CONTACT_COOLDOWN = 600; // ms between contact hits
+const MAHORAGA_ADAPTATION_STEP = 0.05; // 5% less damage per prior hit from that same attack
+const MAHORAGA_COOLDOWN = 10000; // ms, starts as soon as the pet is summoned
+const MEGUMI_SUPER_SELF_HEALTH = 1; // Megumi's own health right after casting it
+
+// Internal obstacle walls (rects), plus the arena border acts as walls too.
+// Walls are built out of connected square tiles on a 20px grid. Each tile
+// carries its own health out of 20 — not displayed or used for anything yet,
+// beyond being chipped away by Dismantle, Cleave, Red, and Freezeframe knockback.
+const TILE = 20;
+const WALL_MAX_HEALTH = 20;
+
+// Builds a block of tiles from grid coordinates (cols across, rows down).
+function wallBlock(col, row, cols, rows) {
+  const tiles = [];
+  for (let c = col; c < col + cols; c++) {
+    for (let r = row; r < row + rows; r++) {
+      const x = c * TILE, y = r * TILE;
+      tiles.push({
+        x, y, w: TILE, h: TILE,
+        homeX: x, homeY: y, // original spot, so a Pull Orb drag can be undone each round
+        health: WALL_MAX_HEALTH,
+        maxHealth: WALL_MAX_HEALTH,
+      });
+    }
+  }
+  return tiles;
+}
+
+const obstacles = [
+  // Center column: two pillars with a gap, plus a short bar across the middle
+  ...wallBlock(19, 2, 2, 5),
+  ...wallBlock(19, 18, 2, 5),
+  ...wallBlock(17, 12, 6, 1),
+
+  // Upper-left and upper-right hooks
+  ...wallBlock(7, 6, 5, 1),
+  ...wallBlock(7, 6, 1, 4),
+  ...wallBlock(28, 6, 5, 1),
+  ...wallBlock(32, 6, 1, 4),
+
+  // Lower-left and lower-right hooks
+  ...wallBlock(7, 15, 1, 4),
+  ...wallBlock(7, 18, 5, 1),
+  ...wallBlock(32, 15, 1, 4),
+  ...wallBlock(28, 18, 5, 1),
+];
+
+// Track which of our movement keys are currently held.
+const trackedKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
+const keys = {};
+
+// Track whether the shoot key is currently held, so OS key-repeat doesn't
+// re-trigger our logic every frame while it's down.
+const shootHeld = { v: false, j: false };
+const specialHeld = { b: false, k: false };
+const superHeld = { n: false, l: false };
+
+canvas.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (onlineMode) {
+    const local = onlineLocalPlayer();
+    if (trackedKeys.includes(k) && ['w','a','s','d'].includes(k)) {
+      keys[k] = true;
+      onlineSendInput('input', k, true);
+      e.preventDefault();
+    }
+    if (k === 'v') {
+      if (!shootHeld.v) {
+        shootHeld.v = true;
+        handleShootKeyDown(local, getNearestEnemy(local) || (local === p1 ? p2 : p1));
+        onlineSendInput('input', 'v', true);
+      }
+      e.preventDefault();
+    }
+    if (k === 'b') {
+      if (!specialHeld.b) {
+        specialHeld.b = true;
+        handleSpecialKeyDown(local, getNearestEnemy(local) || (local === p1 ? p2 : p1));
+        onlineSendInput('input', 'b', true);
+      }
+      e.preventDefault();
+    }
+    if (k === 'n') {
+      if (!superHeld.n) {
+        superHeld.n = true;
+        handleSuperKeyDown(local, getNearestEnemy(local) || (local === p1 ? p2 : p1));
+        onlineSendInput('input', 'n', true);
+      }
+      e.preventDefault();
+    }
+    return;
+  }
+
+  // Offline/local mode keeps the original two-keyboard layout.
+  if (trackedKeys.includes(k)) {
+    keys[k] = true;
+    e.preventDefault();
+  }
+  if (k === 'v') {
+    if (!shootHeld.v) { shootHeld.v = true; handleShootKeyDown(p1, getNearestEnemy(p1) || p2); }
+    e.preventDefault();
+  }
+  if (k === 'j') {
+    if (!shootHeld.j) { shootHeld.j = true; handleShootKeyDown(p2, getNearestEnemy(p2) || p1); }
+    e.preventDefault();
+  }
+  if (k === 'b') {
+    if (!specialHeld.b) { specialHeld.b = true; handleSpecialKeyDown(p1, getNearestEnemy(p1) || p2); }
+    e.preventDefault();
+  }
+  if (k === 'k') {
+    if (!specialHeld.k) { specialHeld.k = true; handleSpecialKeyDown(p2, getNearestEnemy(p2) || p1); }
+    e.preventDefault();
+  }
+  if (k === 'n') {
+    if (!superHeld.n) { superHeld.n = true; handleSuperKeyDown(p1, getNearestEnemy(p1) || p2); }
+    e.preventDefault();
+  }
+  if (k === 'l') {
+    if (!superHeld.l) { superHeld.l = true; handleSuperKeyDown(p2, getNearestEnemy(p2) || p1); }
+    e.preventDefault();
+  }
+});
+canvas.addEventListener('keyup', e => {
+  const k = e.key.toLowerCase();
+  if (onlineMode) {
+    const local = onlineLocalPlayer();
+    if (['w','a','s','d'].includes(k)) {
+      keys[k] = false;
+      onlineSendInput('input', k, false);
+      e.preventDefault();
+    }
+    if (k === 'b') {
+      specialHeld.b = false;
+      onlineSendInput('input', 'b', false);
+      e.preventDefault();
+    }
+    if (k === 'n') {
+      superHeld.n = false;
+      onlineSendInput('input', 'n', false);
+      e.preventDefault();
+    }
+    if (k === 'v') {
+      shootHeld.v = false;
+      handleShootKeyUp(local);
+      onlineSendInput('input', 'v', false);
+      e.preventDefault();
+    }
+    return;
+  }
+
+  if (trackedKeys.includes(k)) {
+    keys[k] = false;
+    e.preventDefault();
+  }
+  if (k === 'b') { specialHeld.b = false; e.preventDefault(); }
+  if (k === 'k') { specialHeld.k = false; e.preventDefault(); }
+  if (k === 'n') { superHeld.n = false; e.preventDefault(); }
+  if (k === 'l') { superHeld.l = false; e.preventDefault(); }
+  if (k === 'v') { shootHeld.v = false; handleShootKeyUp(p1); e.preventDefault(); }
+  if (k === 'j') { shootHeld.j = false; handleShootKeyUp(p2); e.preventDefault(); }
+});
+
+canvas.addEventListener('click', () => canvas.focus());
+
+// Ultimate/"Super" slot, shared by every character (N for both players).
+// Gojo and Naoya have theirs implemented; the others are reserved for later.
+function handleSuperKeyDown(shooter, target) {
+  if (isPaused || roundOver || isDisabled(shooter)) return;
+  if (shooter.shape === 'circle') {
+    attemptPurple(shooter, target);
+  } else if (shooter.shape === 'triangle') {
+    attemptSpeedBoost(shooter);
+  } else if (shooter.shape === 'rhombus') {
+    attemptFurnace(shooter, target);
+  } else if (shooter.shape === 'square') {
+    attemptWave(shooter, target);
+  } else if (shooter.shape === 'star') {
+    attemptMahoraga(shooter, target);
+  }
+}
+
+// Megumi's Super: Mahoraga. Locked out for the first 11 seconds of a round,
+// then a 10s cooldown starting the moment it's cast. Summons the pet (only
+// one at a time — recasting while it's already out does nothing) and costs
+// Megumi almost everything: he's left at 1 health.
+function attemptMahoraga(shooter, target) {
+  const now = performance.now();
+  if (now - roundStartTime < SUPER_UNLOCK_TIME) return; // still locked this round
+  if (now - shooter.superLastUsed < MAHORAGA_COOLDOWN) return; // on cooldown
+  shooter.superLastUsed = now;
+
+  // Recasting replaces the existing Mahoraga instead of creating a second one.
+  shooter.mahoragaPet = new MahoragaPet(shooter, getNearestEnemy(shooter) || target);
+  shooter.health = MEGUMI_SUPER_SELF_HEALTH;
+  shooter.damaged = true;
+}
+
+// Naoya's Super: a self speed buff. Starts as a small boost, ramps up the
+// longer he keeps moving, and hits a max tier that shatters any wall he runs
+// into. Standing still for more than 0.25s resets the speed ramp back to the
+// start (the buff itself keeps running); only the hard 8s cap ends it. Locked
+// for the first 5s of a round — earlier than the other Supers — then a 10s cooldown once the buff ends.
+function attemptSpeedBoost(shooter) {
+  if (shooter.speedBoostActive) return; // already running, let the current one ride
+  const now = performance.now();
+  if (now - roundStartTime < NAOYA_SUPERSONIC_UNLOCK_TIME) return; // still locked this round
+  if (now - shooter.superLastUsed < NAOYA_SUPER_COOLDOWN) return; // on cooldown
+  shooter.speedBoostActive = true;
+  shooter.speedBoostActivatedAt = now;
+  shooter.speedBoostStartTime = now;
+  shooter.speedBoostLastMoveTime = now;
+  shooter.speedHitLastTime = -Infinity;
+}
+
+// Gojo's Super: Purple. Locked out for the first 11 seconds of a round, then
+// usable once every 10 seconds. Travels the length of the arena, shatters any
+// wall tile in its path instead of stopping, and hits for 70 damage. Firing it
+// also puts Red and Blue on cooldown, same as if he'd just used them.
+function attemptPurple(shooter, target) {
+  const now = performance.now();
+  if (now - roundStartTime < SUPER_UNLOCK_TIME) return; // still locked this round
+  if (now - shooter.superLastUsed < PURPLE_COOLDOWN) return; // on cooldown
+  shooter.superLastUsed = now;
+  shooter.lastShotTime = now; // starts Red's cooldown
+  shooter.specialLastUsed = now; // starts Blue's cooldown
+
+  const dx = target.x - shooter.x;
+  const dy = target.y - shooter.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const vx = (dx / dist) * PURPLE_PROJECTILE_SPEED;
+  const vy = (dy / dist) * PURPLE_PROJECTILE_SPEED;
+
+  projectiles.push(new Projectile(
+    shooter.x, shooter.y, vx, vy, shooter.color, shooter, target,
+    PURPLE_DAMAGE, PURPLE_PROJECTILE_RADIUS, false, 0, true
+  ));
+}
+
+// Sukuna's Super: Furnace. Locked out for the first 11 seconds of a round,
+// then usable once every 10 seconds. Explodes on the first wall or the enemy
+// it touches, one-shotting every wall tile in the blast radius and — if the
+// enemy is also caught in it — hitting them for 45 up front plus a 20-damage
+// burn spread over 5 seconds, with a 7.5% slow for that same duration.
+function attemptFurnace(shooter, target) {
+  const now = performance.now();
+  if (now - roundStartTime < SUPER_UNLOCK_TIME) return; // still locked this round
+  if (now - shooter.superLastUsed < FURNACE_COOLDOWN) return; // on cooldown
+  shooter.superLastUsed = now;
+
+  const dx = target.x - shooter.x;
+  const dy = target.y - shooter.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const vx = (dx / dist) * FURNACE_PROJECTILE_SPEED;
+  const vy = (dy / dist) * FURNACE_PROJECTILE_SPEED;
+
+  furnaceShots.push(new FurnaceShot(shooter.x, shooter.y, vx, vy, shooter, target));
+}
+
+function getVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// Choso's Super: Wave. Locked out for the first 11 seconds of a round, then
+// usable once every 10 seconds after the wave ends. Locks in a direction
+// toward the enemy at the moment of casting — see updateWave() for the
+// growth, push, and contact logic, which runs every frame while it's out.
+function attemptWave(shooter, target) {
+  if (shooter.wavingActive) return; // already mid-wave
+  const now = performance.now();
+  if (now - roundStartTime < SUPER_UNLOCK_TIME) return; // still locked this round
+  if (now - shooter.superLastUsed < CHOSO_WAVE_COOLDOWN) return; // on cooldown
+
+  const dx = target.x - shooter.x;
+  const dy = target.y - shooter.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  shooter.waveDir = { x: dx / dist, y: dy / dist };
+  shooter.waveLength = 0;
+  shooter.waveStartTime = now;
+  shooter.wavingActive = true;
+  shooter.waveEndTime = now + CHOSO_WAVE_DURATION;
+  shooter.waveHitTarget = false;
+  shooter.waveHitPet = false;
+
+  // Cancel anything shooter was mid-action on so the lock starts clean.
+  shooter.charging = false;
+  shooter.dashing = false;
+  shooter.holdStartTime = null;
+}
+
+// Darkens a '#rrggbb' color by the given factor (0-1, lower = darker).
+// Used to shade a player's own color while their Super is ready to fire.
+function darkenColor(hex, factor) {
+  const h = hex.replace('#', '');
+  const r = Math.round(parseInt(h.substring(0, 2), 16) * factor);
+  const g = Math.round(parseInt(h.substring(2, 4), 16) * factor);
+  const b = Math.round(parseInt(h.substring(4, 6), 16) * factor);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+const SUPER_READY_DARKEN_FACTOR = 0.5;
+
+// Chips health off a single wall tile. Health can go to 0, at which point the
+// tile stops blocking anything (see isWallActive) but a black husk stays
+// drawn where it used to be.
+function damageWall(tile, amount) {
+  tile.health = Math.max(0, tile.health - amount);
+}
+
+// A wall tile only blocks movement/projectiles/etc. while it still has health.
+// Once it hits 0 it's purely cosmetic — players can walk and shoot through it.
+function isWallActive(tile) {
+  return tile.health > 0;
+}
+
+// Circle-vs-rectangle overlap test, used to find which wall tile(s) sit
+// within a given radius of a point (Cleave's swing, a Pull Orb's body).
+function circleRectOverlap(cx, cy, r, rect) {
+  const closestX = Math.max(rect.x, Math.min(cx, rect.x + rect.w));
+  const closestY = Math.max(rect.y, Math.min(cy, rect.y + rect.h));
+  const dx = cx - closestX;
+  const dy = cy - closestY;
+  return (dx * dx + dy * dy) < r * r;
+}
+
+// All damage lands on a quarter: whole numbers plus .25, .5 and .75.
+function roundDamage(amount) {
+  return Math.round(amount * 4) / 4;
+}
+
+// Health can sit on a quarter too, so trim the trailing zeros when we print it.
+function formatHealth(value) {
+  return Number(value.toFixed(2)).toString();
+}
+
+// All entities currently on the field: both players, plus a summoned
+// Mahoraga pet for as long as it's alive. Used so attacks can pick whichever
+// enemy is actually nearest, not just the opposing player.
+function getAllPets() {
+  const pets = [...activePets];
+  if (p1.mahoragaPet && p1.mahoragaPet.health > 0) pets.push(p1.mahoragaPet);
+  if (p2.mahoragaPet && p2.mahoragaPet.health > 0) pets.push(p2.mahoragaPet);
+  return pets;
+}
+
+function getAllEntities() {
+  return [p1, p2, ...getAllPets().filter(p => p && p.health > 0)];
+}
+
+function getSide(entity) {
+  const owner = entity && entity.owner ? entity.owner : entity;
+  return owner === p1 ? 1 : 2;
+}
+
+function getNearestEnemy(entity) {
+  const mySide = getSide(entity);
+  let nearest = null, nearestDist = Infinity;
+  for (const e of getAllEntities()) {
+    if (e === entity || getSide(e) === mySide || e.health <= 0) continue;
+    const d = Math.hypot(e.x - entity.x, e.y - entity.y);
+    if (d < nearestDist) { nearestDist = d; nearest = e; }
+  }
+  return nearest;
+}
+
+function damageEnemy(shooter, target, amount, attackType, fromNetwork = false) {
+  if (!target || target.health <= 0) return;
+  const sourcePlayer = shooter && shooter.owner ? shooter.owner : shooter;
+  if (onlineMode && onlineMatchStarted && !fromNetwork && sourcePlayer !== onlineLocalPlayer()) return;
+  if (typeof target.takeDamage === 'function') target.takeDamage(amount, attackType);
+  else target.health = Math.max(0, target.health - amount);
+  if (onlineMode && onlineMatchStarted && !fromNetwork && sourcePlayer === onlineLocalPlayer()) {
+    const targetPlayerNumber = target instanceof Player ? (target === p1 ? 1 : 2) : 0;
+    onlineSend({ type:'game', data:{ kind:'damage', targetPlayerNumber, amount, attackType:attackType || 'attack' } });
+  }
+  if (target instanceof Player && target.health <= 0) handleRoundWin(sourcePlayer, target);
+}
+
+
+
+function drawMegumiAbilitySymbol(x, y, type) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = '#000';
+  ctx.fillStyle = '#000';
+  ctx.lineWidth = 3;
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+
+  const s = 0.55 * (typeof MEGUMI_SYMBOL_SIZE !== 'undefined' ? MEGUMI_SYMBOL_SIZE : 1);
+  ctx.scale(s, s);
+
+  if (type === 1) {
+    // Triangle with filled circles at all three vertices.
+    const r = 20;
+    const pts = [];
+    for (let i = 0; i < 3; i++) {
+      const a = (-Math.PI / 2) + i * (2 * Math.PI / 3);
+      pts.push({ x: r * Math.cos(a), y: r * Math.sin(a) });
+    }
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    ctx.lineTo(pts[1].x, pts[1].y);
+    ctx.lineTo(pts[2].x, pts[2].y);
+    ctx.closePath();
+    ctx.stroke();
+    for (const p of pts) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (type === 2) {
+    // Lightning bolt.
+    ctx.beginPath();
+    ctx.moveTo(6, -24);
+    ctx.lineTo(-10, 0);
+    ctx.lineTo(2, 0);
+    ctx.lineTo(-6, 24);
+    ctx.lineTo(14, -5);
+    ctx.lineTo(3, -5);
+    ctx.closePath();
+    ctx.fill();
+  } else if (type === 3) {
+    // Five circles.
+    const pts = [
+      {x: 0, y: 0},
+      {x: -12, y: -10},
+      {x: 12, y: -10},
+      {x: -12, y: 10},
+      {x: 12, y: 10}
+    ];
+    for (const p of pts) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+class Player {
+  constructor(x, y, size, color, glow, shape, keyMap) {
+    this.x = x; this.y = y;
+    this.size = size; // used as bounding radius/half-width for all shapes
+    this.color = color;
+    this.glow = glow;
+    this.shape = shape; // 'circle' | 'square' | 'triangle' | 'rhombus'
+    this.keyMap = keyMap; // {up, down, left, right}
+    this.speed = 3.2;
+    this.maxHealth = MAX_HEALTH_BY_SHAPE[shape] ?? MAX_HEALTH;
+    this.health = this.maxHealth;
+    this.damaged = false; // health bar only shows once damage has been taken
+    this.lastShotTime = -Infinity;
+    this.specialLastUsed = -Infinity;
+    this.superLastUsed = -Infinity; // Gojo's Purple cooldown tracker
+    this.megumiAbilityChargeStart = 0;
+    this.megumiAbilityReady = this.shape === 'star';
+    this.megumiNextPetType = null;
+    this.megumiLastSpawnedType = null;
+    this.useRandomShape = false; // true while "Random" is selected on char-select
+    this.speedBoostActive = false; // Naoya's Super
+    this.speedBoostActivatedAt = 0; // when the buff was first triggered — the hard 8s cap counts from here
+    this.speedBoostStartTime = 0; // when the current speed ramp began — resets if he stands still too long
+    this.speedBoostLastMoveTime = 0;
+    this.speedHitLastTime = -Infinity; // contact-damage cooldown while boosted
+    this.burnStartTime = 0; // Sukuna's Furnace: when the current burn began
+    this.burnEndTime = 0; // ...and when it (and its slow) ends
+    this.burnDuration = FURNACE_BURN_DURATION_CENTER; // this burn's total length (varies with blast distance)
+    this.burnNextTickTime = Infinity; // when the next burn tick fires
+    this.burnSource = null; // who applied the burn, for kill credit
+    this.wavingActive = false; // Choso's Super: Wave, self-lock while it's live
+    this.waveDir = { x: 1, y: 0 }; // locked in toward the enemy at the moment of casting
+    this.waveLength = 0; // current forward extension, grows to CHOSO_WAVE_RANGE then holds
+    this.waveStartTime = 0; // when the current wave was cast
+    this.waveEndTime = 0; // when the current wave (and Choso's self-lock) ends
+    this.waveHitTarget = false; // whether this wave has already connected with the enemy
+    this.waveHitPet = false; // whether this wave has already connected with the enemy's pet
+    this.waveLockedUntil = 0; // can't move on own while this is in the future — refreshed each frame of contact
+    this.wavePinned = false; // true while pushed against a wall/edge and unable to go further
+    this.wavePinNextTick = 0; // next wall/edge pin damage-tick timestamp
+    this.cleaveCharges = CLEAVE_MAX_CHARGES;
+    this.cleaveCooldownEnd = 0;
+    this.charging = false;
+    this.chargeStart = 0;
+    this.chargeTarget = null;
+    this.lastDir = { x: 0, y: 0 }; // most recent nonzero movement direction
+    this.lastMoveTime = -Infinity; // timestamp of the last time this player moved
+    this.dashing = false;
+    this.dashDir = { x: 0, y: 0 };
+    this.dashEndTime = 0;
+    this.dashHasHit = false;
+    this.dashTarget = null;
+    this.frozenUntil = 0; // frozen by Freezeframe until this timestamp
+    this.stunnedUntil = 0; // briefly stunned by Nue
+    this.pulled = false; // stuck inside a Pull Orb until it disappears
+    this.knockback = null; // { dirX, dirY, remaining, source } while being sent flying
+    this.scaleUntil = 0; // Flowing Scale damage reduction is active until this timestamp
+    this.holdStartTime = null; // when the current square stream-fire started
+    this.overheating = false;
+    this.cooldownEndTime = 0;
+    this.cooldownDuration = 0;
+    this.mahoragaPet = null; // Megumi's Super — the wheel pet, while it's alive
+    this.score = 0;
+  }
+
+  getBounds(x, y) {
+    return { x: x - this.size, y: y - this.size, w: this.size * 2, h: this.size * 2 };
+  }
+
+  rectsOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  // Which wall tile (if any) overlaps these bounds — used to figure out
+  // exactly what a knocked-back player slammed into.
+  findBlockingWall(bounds) {
+    for (const o of obstacles) {
+      if (isWallActive(o) && this.rectsOverlap(bounds, o)) return o;
+    }
+    return null;
+  }
+
+  // How much two rects overlap, in px^2 — used to tell whether a move gets a
+  // stuck player further out of a wall or deeper into it.
+  overlapArea(a, b) {
+    const ox = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+    const oy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+    return ox * oy;
+  }
+
+  // Naoya's Super: current speed multiplier while his speed boost is active.
+  // Ramps from a starting boost up to max speed over the first few seconds,
+  // then holds flat at max for the rest of the buff — unless interrupted
+  // (standing still too long ends the whole buff early, see update()).
+  getSpeedMultiplier() {
+    if (this.shape !== 'triangle' || !this.speedBoostActive) return 1;
+    const elapsed = Math.max(0, performance.now() - this.speedBoostStartTime);
+    if (elapsed < NAOYA_SUPER_RAMP_TIME) {
+      const t = elapsed / NAOYA_SUPER_RAMP_TIME;
+      return NAOYA_SUPER_START_MULT + t * (NAOYA_SUPER_MAX_MULT - NAOYA_SUPER_START_MULT);
+    }
+    return NAOYA_SUPER_MAX_MULT;
+  }
+
+  // True once Naoya's speed boost has ramped all the way to max — that's
+  // when running into a wall shatters it instead of stopping him.
+  isAtMaxSpeed() {
+    return this.shape === 'triangle' && this.speedBoostActive &&
+      performance.now() - this.speedBoostStartTime >= NAOYA_SUPER_RAMP_TIME;
+  }
+
+  // Instantly shatters any wall tile overlapping this position. Used when
+  // Naoya barrels into one at max speed.
+  breakWallsAt(x, y) {
+    const bounds = this.getBounds(x, y);
+    let broke = false;
+    for (const o of obstacles) {
+      if (isWallActive(o) && this.rectsOverlap(bounds, o)) {
+        damageWall(o, o.health);
+        broke = true;
+      }
+    }
+    return broke;
+  }
+
+  canMoveTo(x, y, other, ignoreOther) {
+    if (x - this.size < 4 || x + this.size > W - 4) return false;
+    if (y - this.size < 4 || y + this.size > H - 4) return false;
+    const bounds = this.getBounds(x, y);
+    const curBounds = this.getBounds(this.x, this.y);
+    for (const o of obstacles) {
+      if (!isWallActive(o)) continue; // shattered tiles no longer block anything
+      if (this.rectsOverlap(bounds, o)) {
+        // Normally a wall fully blocks movement. But if we're already stuck
+        // inside this tile (knockback, a pull, etc. can wedge someone in),
+        // allow any move that doesn't make the overlap worse — that way a
+        // trapped player can always walk themselves back out.
+        if (this.rectsOverlap(curBounds, o) &&
+            this.overlapArea(bounds, o) <= this.overlapArea(curBounds, o)) {
+          continue;
+        }
+        return false;
+      }
+    }
+    if (!ignoreOther) {
+      const minDist = this.size + other.size;
+      const curDist = Math.hypot(this.x - other.x, this.y - other.y);
+      const newDist = Math.hypot(x - other.x, y - other.y);
+      // Normally you can't walk into the other player. But if you've somehow
+      // ended up overlapping them (a knockback or a pull can do it), any move
+      // that increases the gap is allowed so you're never stuck.
+      if (newDist < minDist && newDist <= curDist) return false;
+    }
+    return true;
+  }
+
+  isFrozen() {
+    return performance.now() < this.frozenUntil;
+  }
+
+  update(other) {
+    if (this.speedBoostActive) {
+      const now = performance.now();
+      if (now >= this.speedBoostActivatedAt + NAOYA_SUPER_DURATION) {
+        this.speedBoostActive = false; // hard 8s cap reached
+        this.superLastUsed = now; // cooldown starts once the buff itself ends
+      } else if (now - this.speedBoostLastMoveTime > NAOYA_SUPER_STOP_GRACE) {
+        this.speedBoostStartTime = now; // stood still too long — ramp resets, buff keeps running
+      }
+    }
+
+    if (this.wavingActive) {
+      // The wave stays attached to Choso, while its direction remains locked
+      // to the direction chosen when the Super was activated. Choso is still
+      // allowed to move normally during the Super.
+      this.updateWave(other);
+    }
+
+    if (this.pulled) return; // stuck inside a Pull Orb — it controls position now
+
+    if (this.knockback) {
+      this.updateKnockback(other);
+      return;
+    }
+
+    if (this.isFrozen()) return; // frozen solid, no moving and no attacking
+
+    if (this.dashing) {
+      this.updateDash(other);
+      return;
+    }
+
+    const waveLocked = performance.now() < this.waveLockedUntil; // hit by Choso's Wave — can't move on own
+
+    let dx = 0, dy = 0;
+    if (!waveLocked) {
+      const inputKeys = getPlayerKeys(this);
+      const upKey = onlineMode ? 'w' : this.keyMap.up;
+      const downKey = onlineMode ? 's' : this.keyMap.down;
+      const leftKey = onlineMode ? 'a' : this.keyMap.left;
+      const rightKey = onlineMode ? 'd' : this.keyMap.right;
+      if (inputKeys[upKey]) dy -= 1;
+      if (inputKeys[downKey]) dy += 1;
+      if (inputKeys[leftKey]) dx -= 1;
+      if (inputKeys[rightKey]) dx += 1;
+    }
+
+    if (dx !== 0 && dy !== 0) {
+      const norm = Math.SQRT1_2;
+      dx *= norm; dy *= norm;
+    }
+
+    if (dx !== 0 || dy !== 0) {
+      this.lastDir = { x: dx, y: dy };
+      this.lastMoveTime = performance.now();
+      if (this.speedBoostActive) this.speedBoostLastMoveTime = this.lastMoveTime;
+    }
+
+    const burnSlow = performance.now() < this.burnEndTime ? FURNACE_SLOW_FACTOR : 1;
+    const speed = this.speed * this.getSpeedMultiplier() * burnSlow;
+    const newX = this.x + dx * speed;
+    const newY = this.y + dy * speed;
+    const ignoreOther = this.speedBoostActive; // Super lets him run straight through the enemy
+
+    let moved = false;
+    if (this.canMoveTo(newX, newY, other, ignoreOther)) {
+      this.x = newX; this.y = newY; moved = true;
+    } else {
+      if (dx !== 0 && this.canMoveTo(newX, this.y, other, ignoreOther)) {
+        this.x = newX; moved = true;
+      }
+      if (dy !== 0 && this.canMoveTo(this.x, newY, other, ignoreOther)) {
+        this.y = newY; moved = true;
+      }
+    }
+
+    if (!moved && this.isAtMaxSpeed()) {
+      // At max speed, a fully blocked path just gets smashed through instead.
+      const broke = this.breakWallsAt(newX, newY) | this.breakWallsAt(newX, this.y) | this.breakWallsAt(this.x, newY);
+      if (broke) {
+        if (this.canMoveTo(newX, newY, other, ignoreOther)) { this.x = newX; this.y = newY; }
+        else if (dx !== 0 && this.canMoveTo(newX, this.y, other, ignoreOther)) { this.x = newX; }
+        else if (dy !== 0 && this.canMoveTo(this.x, newY, other, ignoreOther)) { this.y = newY; }
+      }
+    }
+
+    // While boosted, Naoya can't attack — instead, touching the nearest enemy
+    // (a pet counts too) deals damage that scales with his current speed
+    // tier (capped by a short per-hit cooldown so standing pressed against
+    // them isn't a free melt).
+    if (this.speedBoostActive) {
+      const now = performance.now();
+      const enemy = getNearestEnemy(this);
+      if (enemy) {
+        const dist = Math.hypot(this.x - enemy.x, this.y - enemy.y);
+        if (dist <= this.size + enemy.size + 3 && now - this.speedHitLastTime >= NAOYA_SUPER_HIT_COOLDOWN) {
+          this.speedHitLastTime = now;
+          const dmg = roundDamage(NAOYA_SUPER_BASE_DAMAGE * this.getSpeedMultiplier());
+          damageEnemy(this, enemy, dmg, 'supersonicContact');
+        }
+      }
+    }
+  }
+
+  // Choso's Super: Wave. While it's active, Choso can move normally. The
+  // wave remains attached to him and keeps the original cast direction.
+  // The wave is a rectangle running from Choso's position out along the
+  // locked-in direction: it grows from 0 to CHOSO_WAVE_RANGE over
+  // CHOSO_WAVE_GROWTH_TIME, then just holds at full length for the rest of
+  // the duration. Every frame, anyone touching that rectangle takes a
+  // one-time hit (first contact only), gets shoved further along the wave's
+  // direction, and can't move on their own — if the shove would run them
+  // into a wall, they simply stop there instead (still locked, since
+  // they're still touching it).
+  updateWave(other) {
+    const now = performance.now();
+    if (now >= this.waveEndTime) {
+      this.wavingActive = false;
+      this.superLastUsed = now; // cooldown starts once the wave ends
+      return;
+    }
+
+    const elapsed = now - this.waveStartTime;
+    this.waveLength = Math.min(CHOSO_WAVE_RANGE, (elapsed / CHOSO_WAVE_GROWTH_TIME) * CHOSO_WAVE_RANGE);
+
+    // Every enemy pet is a valid Wave target too. Pets are pushed along the
+    // wave and locked while touching it, just like players.
+    for (const pet of getAllPets()) {
+      if (!pet || pet.health <= 0 || getSide(pet) === getSide(this)) continue;
+      const pdx = pet.x - this.x, pdy = pet.y - this.y;
+      const pforward = pdx * this.waveDir.x + pdy * this.waveDir.y;
+      const plateral = -pdx * this.waveDir.y + pdy * this.waveDir.x;
+      const phalfWidth = CHOSO_WAVE_WIDTH / 2 + (pet.size || pet.radius || 13);
+      const pr = pet.size || pet.radius || 13;
+      const petTouching = pforward >= -pr && pforward <= this.waveLength + pr
+        && Math.abs(plateral) <= phalfWidth;
+      if (!petTouching) {
+        pet.wavePinned = false;
+        continue;
+      }
+      if (!pet.waveHitBy) pet.waveHitBy = new Set();
+      if (!pet.waveHitBy.has(this)) {
+        pet.waveHitBy.add(this);
+        damageEnemy(this, pet, CHOSO_WAVE_DAMAGE, 'wave');
+        if (pet.health <= 0) continue;
+      }
+      pet.waveLockedUntil = now + CHOSO_WAVE_LOCK_REFRESH;
+      const newX = pet.x + this.waveDir.x * CHOSO_WAVE_PUSH_SPEED;
+      const newY = pet.y + this.waveDir.y * CHOSO_WAVE_PUSH_SPEED;
+      let moved = false;
+      if (typeof pet.canMoveTo === 'function' && pet.canMoveTo(newX, newY)) {
+        pet.x = newX; pet.y = newY; moved = true;
+      } else if (typeof pet.canMoveTo === 'function' && pet.canMoveTo(newX, pet.y)) {
+        pet.x = newX; moved = true;
+      } else if (typeof pet.canMoveTo === 'function' && pet.canMoveTo(pet.x, newY)) {
+        pet.y = newY; moved = true;
+      }
+      if (!moved) {
+        pet.wavePinned = true;
+        if (!pet.wavePinNextTick) pet.wavePinNextTick = now + CHOSO_WAVE_PIN_TICK_INTERVAL;
+        if (now >= pet.wavePinNextTick) {
+          pet.wavePinNextTick += CHOSO_WAVE_PIN_TICK_INTERVAL;
+          damageEnemy(this, pet, CHOSO_WAVE_PIN_TICK_DAMAGE, 'wavePin');
+        }
+      } else {
+        pet.wavePinned = false;
+      }
+    }
+
+    // Project the enemy into the wave's own coordinate frame: forward =
+    // distance along its direction of travel, lateral = distance off center.
+    const dx = other.x - this.x;
+    const dy = other.y - this.y;
+    const forward = dx * this.waveDir.x + dy * this.waveDir.y;
+    const lateral = -dx * this.waveDir.y + dy * this.waveDir.x;
+    const halfWidth = CHOSO_WAVE_WIDTH / 2 + other.size;
+    const touching = forward >= -other.size && forward <= this.waveLength + other.size
+      && Math.abs(lateral) <= halfWidth;
+
+    if (!touching) {
+      other.wavePinned = false; // no longer in contact, so no more pin ticks
+      return;
+    }
+
+    if (!this.waveHitTarget) {
+      this.waveHitTarget = true;
+      damageEnemy(this, other, CHOSO_WAVE_DAMAGE, 'wave');
+      if (other.health <= 0) return;
+    }
+
+    // Refreshed every frame of contact, with a short buffer so a one-frame
+    // gap (e.g. update order) doesn't let go of the lock early.
+    other.waveLockedUntil = now + CHOSO_WAVE_LOCK_REFRESH;
+
+    const newX = other.x + this.waveDir.x * CHOSO_WAVE_PUSH_SPEED;
+    const newY = other.y + this.waveDir.y * CHOSO_WAVE_PUSH_SPEED;
+    let moved = false;
+    if (other.canMoveTo(newX, newY, this, true)) {
+      other.x = newX; other.y = newY; moved = true;
+    } else if (other.canMoveTo(newX, other.y, this, true)) {
+      other.x = newX; moved = true;
+    } else if (other.canMoveTo(other.x, newY, this, true)) {
+      other.y = newY; moved = true;
+    }
+
+    if (moved) {
+      other.wavePinned = false;
+    } else {
+      // A wall or the arena edge stopped them — they take periodic damage
+      // for as long as they're pinned there, still locked since they're
+      // still touching the wave.
+      if (!other.wavePinned) {
+        other.wavePinned = true;
+        other.wavePinNextTick = now + CHOSO_WAVE_PIN_TICK_INTERVAL;
+      } else if (now >= other.wavePinNextTick) {
+        other.wavePinNextTick += CHOSO_WAVE_PIN_TICK_INTERVAL;
+        damageEnemy(this, other, CHOSO_WAVE_PIN_TICK_DAMAGE, 'wavePin');
+      }
+    }
+  }
+
+  // Being sent flying by Naoya's Freezeframe follow-up. Moves in small steps so
+  // we can tell exactly when the flight is interrupted by a wall.
+  updateKnockback(other) {
+    const kb = this.knockback;
+    const stepSize = 1;
+    const steps = Math.min(Math.round(KNOCKBACK_SPEED / stepSize), Math.ceil(kb.remaining));
+    let hitWall = false;
+    let blockedTile = null;
+
+    for (let i = 0; i < steps; i++) {
+      const testX = this.x + kb.dirX * stepSize;
+      const testY = this.y + kb.dirY * stepSize;
+      if (this.canMoveTo(testX, testY, other, true)) {
+        this.x = testX; this.y = testY;
+        kb.remaining -= stepSize;
+      } else {
+        hitWall = true;
+        blockedTile = this.findBlockingWall(this.getBounds(testX, testY));
+        break;
+      }
+    }
+
+    if (hitWall) {
+      this.knockback = null;
+      // Hitting a wall after the frozen-state launch deals extra impact damage.
+      this.takeDamage(KNOCKBACK_WALL_DAMAGE);
+      if (blockedTile) damageWall(blockedTile, FREEZEFRAME_WALL_DAMAGE);
+      if (this.health <= 0) {
+        handleRoundWin(kb.source, this);
+      }
+    } else if (kb.remaining <= 0) {
+      this.knockback = null;
+    }
+  }
+
+  updateDash(other) {
+    // Move in small increments so that hitting a wall stops the dash exactly
+    // at the wall, instead of blocking the whole step and going nowhere.
+    const stepSize = 1;
+    const steps = Math.round(DASH_SPEED / stepSize);
+    let hitWall = false;
+    for (let i = 0; i < steps; i++) {
+      const testX = this.x + this.dashDir.x * stepSize;
+      const testY = this.y + this.dashDir.y * stepSize;
+      if (this.canMoveTo(testX, testY, other, true)) {
+        this.x = testX; this.y = testY;
+      } else {
+        hitWall = true;
+        break;
+      }
+    }
+    if (hitWall) {
+      this.dashing = false; // hit a wall, dash ends exactly there
+    }
+
+    if (!this.dashHasHit) {
+      const enemy = getNearestEnemy(this);
+      if (enemy) {
+        const dist = Math.hypot(this.x - enemy.x, this.y - enemy.y);
+        if (dist < this.size + enemy.size) {
+          this.dashHasHit = true;
+          const isPet = enemy instanceof MahoragaPet;
+          const wasFrozen = !isPet && enemy.isFrozen();
+          const hadLivePet = !isPet && enemy.mahoragaPet && enemy.mahoragaPet.health > 0;
+          damageEnemy(this, enemy, DASH_DAMAGE, 'dash');
+          if (!isPet && !hadLivePet && wasFrozen && enemy.health > 0) {
+            // The frozen state is consumed by the hit: the enemy is launched
+            // normally from here, rather than staying frozen after knockback.
+            enemy.frozenUntil = 0;
+            applyKnockback(this, enemy);
+            this.dashing = false; // the hit ends the dash, they take it from here
+          }
+        }
+      }
+    }
+
+    if (performance.now() >= this.dashEndTime) {
+      this.dashing = false;
+    }
+  }
+
+  takeDamage(amount) {
+    let dealt = amount;
+    if (performance.now() < this.scaleUntil) dealt *= SCALE_REDUCTION; // Flowing Scale
+    dealt = roundDamage(dealt);
+    this.health = Math.max(0, roundDamage(this.health - dealt));
+    this.damaged = true;
+  }
+
+  // Whether the E/U secondary ability is available right now, for the glow ring.
+  isSpecialReady() {
+    if (this.shape === 'circle') {
+      return performance.now() - this.specialLastUsed >= SPECIAL_COOLDOWN;
+    }
+    if (this.shape === 'rhombus') {
+      return this.cleaveCharges > 0;
+    }
+    if (this.shape === 'square') {
+      return performance.now() - this.specialLastUsed >= SCALE_COOLDOWN;
+    }
+    if (this.shape === 'triangle') {
+      return performance.now() - this.specialLastUsed >= FREEZE_COOLDOWN;
+    }
+    if (this.shape === 'star') {
+      return this.megumiAbilityReady;
+    }
+    return false;
+  }
+
+  // Whether the Super (C/N) is available right now — used to darken the
+  // player's own color as a "ready" tell.
+  isSuperReady() {
+    const now = performance.now();
+    if (this.shape === 'triangle') {
+      return now - roundStartTime >= NAOYA_SUPERSONIC_UNLOCK_TIME &&
+        !this.speedBoostActive && now - this.superLastUsed >= NAOYA_SUPER_COOLDOWN;
+    }
+    if (now - roundStartTime < SUPER_UNLOCK_TIME) return false; // locked early in round
+    if (this.shape === 'circle') {
+      return now - this.superLastUsed >= PURPLE_COOLDOWN;
+    }
+    if (this.shape === 'rhombus') {
+      return now - this.superLastUsed >= FURNACE_COOLDOWN;
+    }
+    if (this.shape === 'square') {
+      return !this.wavingActive && now - this.superLastUsed >= CHOSO_WAVE_COOLDOWN;
+    }
+    if (this.shape === 'star') {
+      return (!this.mahoragaPet || this.mahoragaPet.health <= 0) &&
+        now - this.superLastUsed >= MAHORAGA_COOLDOWN;
+    }
+    return false;
+  }
+
+  draw() {
+    ctx.save();
+    ctx.shadowColor = this.glow;
+    ctx.shadowBlur = this.dashing ? 32 : 18;
+    ctx.fillStyle = this.isSuperReady() ? darkenColor(this.color, SUPER_READY_DARKEN_FACTOR) : this.color;
+
+    const R = this.size;
+    switch (this.shape) {
+      case 'circle':
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, R, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case 'square':
+        ctx.fillRect(this.x - R, this.y - R, R * 2, R * 2);
+        break;
+      case 'triangle': {
+        ctx.beginPath();
+        for (let i = 0; i < 3; i++) {
+          const angle = (-90 + i * 120) * Math.PI / 180;
+          const px = this.x + R * 1.15 * Math.cos(angle);
+          const py = this.y + R * 1.15 * Math.sin(angle);
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+      case 'rhombus': {
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - R);
+        ctx.lineTo(this.x + R, this.y);
+        ctx.lineTo(this.x, this.y + R);
+        ctx.lineTo(this.x - R, this.y);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+      case 'star': {
+        ctx.beginPath();
+        const spikes = 5;
+        const outerR = R * 1.2;
+        const innerR = R * 0.5;
+        for (let i = 0; i < spikes * 2; i++) {
+          const angle = (-90 + i * (180 / spikes)) * Math.PI / 180;
+          const r = i % 2 === 0 ? outerR : innerR;
+          const px = this.x + r * Math.cos(angle);
+          const py = this.y + r * Math.sin(angle);
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+    }
+    if (this.shape === 'star' && this.megumiAbilityReady && this.megumiNextPetType) {
+      const MEGUMI_SYMBOL_SIZE = this.size;
+      drawMegumiAbilitySymbol(this.x, this.y, this.megumiNextPetType);
+    }
+
+    ctx.restore();
+
+    // White square around anyone currently frozen by Freezeframe
+    if (this.isFrozen()) {
+      const half = this.size + 9;
+      ctx.save();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 12;
+      ctx.strokeRect(this.x - half, this.y - half, half * 2, half * 2);
+      ctx.restore();
+    }
+
+    // Dashed ring around anyone locked out of moving by Choso's Wave — red
+    // while just being pushed, orange once pinned against a wall or the
+    // arena edge and taking tick damage. Distinct from the Freezeframe box
+    // since they can still attack, just not move on their own.
+    if (performance.now() < this.waveLockedUntil) {
+      ctx.save();
+      ctx.strokeStyle = this.wavePinned ? '#ff8a00' : '#e5484d';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([5, 4]);
+      ctx.shadowColor = ctx.strokeStyle;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size + 9, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Choso's Wave itself — a bar running from him out to its current
+    // length, along whatever direction it was cast in.
+    if (this.wavingActive) {
+      const halfWidth = CHOSO_WAVE_WIDTH / 2;
+      const dirX = this.waveDir.x, dirY = this.waveDir.y;
+      const perpX = -dirY, perpY = dirX;
+      const x1 = this.x + dirX * this.waveLength, y1 = this.y + dirY * this.waveLength;
+      ctx.save();
+      ctx.fillStyle = this.color;
+      ctx.globalAlpha = 0.55;
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.moveTo(this.x + perpX * halfWidth, this.y + perpY * halfWidth);
+      ctx.lineTo(x1 + perpX * halfWidth, y1 + perpY * halfWidth);
+      ctx.lineTo(x1 - perpX * halfWidth, y1 - perpY * halfWidth);
+      ctx.lineTo(this.x - perpX * halfWidth, this.y - perpY * halfWidth);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Shield ring, in the player's own color, while Flowing Scale is soaking damage
+    if (performance.now() < this.scaleUntil) {
+      ctx.save();
+      ctx.strokeStyle = this.color;
+      ctx.globalAlpha = 0.75;
+      ctx.lineWidth = 4;
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size + 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Glow ring indicating the secondary (E/U) ability is ready to use.
+    // Sukuna's Cleave has three charges, so its ring also acts as a visual
+    // charge counter: 3 charges = a full circle, 2 = 2/3, 1 = 1/3.
+    if (this.shape === 'rhombus') {
+      const charges = Math.max(0, Math.min(CLEAVE_MAX_CHARGES, this.cleaveCharges));
+      if (charges > 0) {
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 250);
+        const startAngle = -Math.PI / 2;
+        const endAngle = startAngle + (Math.PI * 2 * charges / CLEAVE_MAX_CHARGES);
+        ctx.save();
+        ctx.strokeStyle = '#ffffff';
+        ctx.globalAlpha = 0.4 + 0.4 * pulse;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'butt';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size + 8, startAngle, endAngle);
+        ctx.stroke();
+        ctx.restore();
+      }
+    } else if (this.isSpecialReady()) {
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 250);
+      ctx.save();
+      ctx.strokeStyle = '#ffffff';
+      ctx.globalAlpha = 0.4 + 0.4 * pulse;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size + 8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Health bar — always visible, above the player, with the numeric value
+    {
+      const barW = 40, barH = 6;
+      const bx = this.x - barW / 2, by = this.y - this.size - 16;
+      ctx.fillStyle = '#000000aa';
+      ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
+      const pct = this.health / this.maxHealth;
+      ctx.fillStyle = pct > 0.3 ? getVar('--hp-good') : getVar('--hp-bad');
+      ctx.fillRect(bx, by, barW * pct, barH);
+
+      ctx.save();
+      ctx.font = 'bold 10px Segoe UI, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#000000';
+      ctx.shadowBlur = 3;
+      ctx.fillText(formatHealth(this.health), this.x, by - 4);
+      ctx.restore();
+    }
+
+    // Status bars below the player — stacked so multiple can show at once
+    // without overlapping. Each one remembers when it started, oldest stays
+    // closest to the player, and newer bars stack in underneath.
+    const bars = this.getStatusBars();
+    bars.sort((a, b) => a.startTime - b.startTime);
+    let barY = this.y + this.size + 14;
+    const barW = 40, barH = 6, barGap = 10;
+    for (const bar of bars) {
+      const bx = this.x - barW / 2, by = barY;
+      ctx.fillStyle = '#000000aa';
+      ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
+      ctx.fillStyle = bar.color;
+      ctx.fillRect(bx, by, barW * Math.max(0, Math.min(1, bar.fraction)), barH);
+      barY += barGap;
+    }
+  }
+
+  // Builds the list of currently-active status bars for this player (own
+  // ability cooldowns/charges, plus external effects like Sukuna's burn).
+  // Each entry carries a startTime so draw() can stack them oldest-first.
+  getStatusBars() {
+    const now = performance.now();
+    const bars = [];
+
+    if (this.charging) {
+      // Purple bar filling up as Gojo's charge shot builds
+      const t = Math.min((now - this.chargeStart) / CIRCLE_MAX_CHARGE_MS, 1);
+      bars.push({ color: '#a855f7', fraction: t, startTime: this.chargeStart });
+    } else if (this.shape === 'circle' && now - this.lastShotTime < SHOT_COOLDOWN) {
+      // White bar shrinking as Gojo's shot cooldown finishes
+      const remaining = 1 - (now - this.lastShotTime) / SHOT_COOLDOWN;
+      bars.push({ color: '#ffffff', fraction: remaining, startTime: this.lastShotTime });
+    } else if (this.shape === 'triangle' && this.speedBoostActive) {
+      // Teal bar filling up as Naoya's Super ramps toward max speed
+      const progress = Math.min(1, (now - this.speedBoostStartTime) / NAOYA_SUPER_RAMP_TIME);
+      bars.push({ color: '#2dd4bf', fraction: progress, startTime: this.speedBoostStartTime });
+    } else if (this.shape === 'triangle' && now - this.lastShotTime < DASH_COOLDOWN) {
+      // White bar shrinking as Naoya's dash cooldown finishes
+      const remaining = 1 - (now - this.lastShotTime) / DASH_COOLDOWN;
+      bars.push({ color: '#ffffff', fraction: remaining, startTime: this.lastShotTime });
+    } else if (this.shape === 'rhombus' && this.cleaveCharges <= 0 && now < this.cleaveCooldownEnd) {
+      // White bar shrinking as all 3 Cleave charges recharge together
+      const start = this.cleaveCooldownEnd - CLEAVE_COOLDOWN;
+      const remaining = 1 - (this.cleaveCooldownEnd - now) / CLEAVE_COOLDOWN;
+      bars.push({ color: '#ffffff', fraction: remaining, startTime: start });
+    } else if (this.shape === 'rhombus' && now - this.lastShotTime < SLASH_COOLDOWN) {
+      // White bar shrinking as Sukuna's slash cooldown finishes
+      const remaining = 1 - (now - this.lastShotTime) / SLASH_COOLDOWN;
+      bars.push({ color: '#ffffff', fraction: remaining, startTime: this.lastShotTime });
+    } else if (this.shape === 'square' && this.overheating) {
+      // Red bar shrinking as Choso's overheat cooldown finishes
+      const start = this.cooldownEndTime - this.cooldownDuration;
+      const remaining = Math.max(0, (this.cooldownEndTime - now) / this.cooldownDuration);
+      bars.push({ color: '#f85149', fraction: remaining, startTime: start });
+    } else if (this.shape === 'star' && now - this.lastShotTime < MEGUMI_STRIKE_COOLDOWN) {
+      // White bar shrinking as Megumi's Strike cooldown finishes
+      const remaining = 1 - (now - this.lastShotTime) / MEGUMI_STRIKE_COOLDOWN;
+      bars.push({ color: '#ffffff', fraction: remaining, startTime: this.lastShotTime });
+    }
+
+    if (now < this.stunnedUntil) {
+      const remaining = (this.stunnedUntil - now) / NUE_STUN_DURATION;
+      bars.push({ color: '#7ddcff', fraction: remaining, startTime: this.stunnedUntil - NUE_STUN_DURATION });
+    }
+
+    // Sukuna's Furnace burn — independent of the burning player's own shape,
+    // so it can appear alongside any of the bars above.
+    if (now < this.burnEndTime) {
+      const remaining = (this.burnEndTime - now) / this.burnDuration;
+      bars.push({ color: '#ff9800', fraction: remaining, startTime: this.burnStartTime });
+    }
+
+    // Choso's Wave — a red bar shrinking as his own wave (and its lock
+    // on Choso himself) counts down to the end.
+    if (this.wavingActive) {
+      const total = CHOSO_WAVE_DURATION;
+      const remaining = (this.waveEndTime - now) / total;
+      bars.push({ color: '#e5484d', fraction: remaining, startTime: this.waveEndTime - total });
+    }
+
+    return bars;
+  }
+}
+
+// Megumi's Super: Mahoraga. An eight-spoked wheel that fights on his behalf.
+// It's solid against walls (no longer phases through them) and beelines for
+// whoever it's hunting, hitting for MAHORAGA_CONTACT_DAMAGE at point-blank
+// range. It's a separate target in its own right, with its own health and
+// damage adaptation below — it does NOT shield Megumi from anything; hits
+// aimed at him still land on him directly, even while the pet is alive.
+
+function drawPetHealth(ctx, pet, barW = 40, barH = 6) {
+  const bx = pet.x - barW / 2;
+  const by = pet.y - (pet.size || pet.radius || 13) - 16;
+  ctx.save();
+  ctx.fillStyle = '#000000aa';
+  ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
+  const pct = Math.max(0, Math.min(1, pet.health / pet.maxHealth));
+  ctx.fillStyle = pct > 0.3 ? getVar('--hp-good') : getVar('--hp-bad');
+  ctx.fillRect(bx, by, barW * pct, barH);
+  ctx.font = 'bold 10px Segoe UI, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = '#000000';
+  ctx.shadowBlur = 3;
+  ctx.fillText(formatHealth(pet.health), pet.x, by - 4);
+  ctx.restore();
+}
+
+function petCanMoveTo(pet, x, y, ignoreWalls = false) {
+  const r = pet.radius || pet.size || 13;
+  if (x - r < 4 || x + r > W - 4 || y - r < 4 || y + r > H - 4) return false;
+  if (ignoreWalls) return true;
+  for (const o of obstacles) {
+    if (isWallActive(o) && circleRectOverlap(x, y, r, o)) return false;
+  }
+  return true;
+}
+
+class DivineDogPet {
+  constructor(owner, x, y) {
+    this.owner = owner; this.x = x; this.y = y;
+    this.radius = 13; this.size = 13;
+    this.health = 50; this.maxHealth = 50;
+    this.speed = 2.7; this.attackDamage = 15;
+    this.attackCooldown = 700; this.lastAttack = 0;
+    this.spawnTime = performance.now();
+    this.expiresAt = this.spawnTime + DIVINE_DOG_DURATION;
+    this.dead = false; this.isPet = true; this.petType = 1;
+    this.frozenUntil = 0; this.stunnedUntil = 0; this.pulled = false;
+    this.waveLockedUntil = 0; this.wavePinned = false; this.wavePinNextTick = 0;
+    this.knockback = null;
+    this.burnStartTime = 0; this.burnEndTime = 0; this.burnNextTickTime = Infinity;
+    this.burnDuration = FURNACE_BURN_DURATION_CENTER; this.burnSource = null;
+  }
+  canMoveTo(x, y) { return petCanMoveTo(this, x, y); }
+  isFrozen() { return performance.now() < this.frozenUntil; }
+  update(target) {
+    const now = performance.now();
+    if (this.dead || now >= this.expiresAt || !target || target.health <= 0) {
+      if (performance.now() >= this.expiresAt) this.dead = true;
+      return;
+    }
+    if (this.pulled || this.isFrozen() || now < this.stunnedUntil || now < this.waveLockedUntil) return;
+    const dx = target.x - this.x, dy = target.y - this.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const targetSize = target.size || target.radius || 13;
+    if (dist > this.radius + targetSize + 2) {
+      const nx = dx / dist * this.speed;
+      const ny = dy / dist * this.speed;
+      const nextX = this.x + nx;
+      const nextY = this.y + ny;
+      // Divine Dogs cannot pass through arena walls.
+      const canMoveTo = (x, y) => {
+        if (x - this.radius < 4 || x + this.radius > W - 4) return false;
+        if (y - this.radius < 4 || y + this.radius > H - 4) return false;
+        for (const o of obstacles) {
+          if (isWallActive(o) && circleRectOverlap(x, y, this.radius, o)) return false;
+        }
+        return true;
+      };
+      if (canMoveTo(nextX, nextY)) {
+        this.x = nextX; this.y = nextY;
+      } else if (canMoveTo(nextX, this.y)) {
+        this.x = nextX;
+      } else if (canMoveTo(this.x, nextY)) {
+        this.y = nextY;
+      }
+    } else if (performance.now() - this.lastAttack >= this.attackCooldown) {
+      damageEnemy(this, target, this.attackDamage, 'divineDog');
+      this.lastAttack = performance.now();
+    }
+    if (this.health <= 0) this.dead = true;
+  }
+  takeDamage(amount) {
+    this.health = Math.max(0, this.health - amount);
+    if (this.health <= 0) this.dead = true;
+  }
+  draw(ctx) {
+    if (this.dead) return;
+    ctx.save();
+    ctx.fillStyle = this.owner.color;
+    ctx.strokeStyle = this.owner.color;
+    ctx.shadowColor = this.owner.glow; ctx.shadowBlur = 10; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+    // Visible Divine Dogs symbol on the pet itself.
+    ctx.shadowBlur = 0;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.strokeStyle = '#000';
+    ctx.fillStyle = '#000';
+    ctx.lineWidth = 1.5;
+    const r = 8;
+    const pts = [];
+    for (let i = 0; i < 3; i++) {
+      const a = (-Math.PI / 2) + i * (2 * Math.PI / 3);
+      pts.push({ x: r * Math.cos(a), y: r * Math.sin(a) });
+    }
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    ctx.lineTo(pts[1].x, pts[1].y);
+    ctx.lineTo(pts[2].x, pts[2].y);
+    ctx.closePath();
+    ctx.stroke();
+    for (const p of pts) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.restore();
+    drawPetHealth(ctx, this, 40, 6);
+  }
+}
+
+class NuePet {
+  constructor(owner, x, y) {
+    this.owner = owner; this.x = x; this.y = y;
+    this.spawnTime = performance.now();
+    this.expiresAt = this.spawnTime + NUE_DURATION;
+    this.radius = 15; this.size = 15;
+    this.health = 100; this.maxHealth = 100;
+    this.speed = 2.15; this.attackDamage = 15;
+    this.attackCooldown = NUE_ATTACK_COOLDOWN; this.lastAttack = 0;
+    this.dead = false; this.isPet = true; this.petType = 2;
+    this.frozenUntil = 0; this.stunnedUntil = 0; this.pulled = false;
+    this.waveLockedUntil = 0; this.wavePinned = false; this.wavePinNextTick = 0;
+    this.knockback = null;
+    this.burnStartTime = 0; this.burnEndTime = 0; this.burnNextTickTime = Infinity;
+    this.burnDuration = FURNACE_BURN_DURATION_CENTER; this.burnSource = null;
+  }
+  canMoveTo(x, y) { return petCanMoveTo(this, x, y); }
+  isFrozen() { return performance.now() < this.frozenUntil; }
+  update(target) {
+    const now = performance.now();
+    if (now >= this.expiresAt) { this.dead = true; this.health = 0; return; }
+    if (this.dead || !target || target.health <= 0) return;
+    if (this.pulled || this.isFrozen() || now < this.stunnedUntil || now < this.waveLockedUntil) return;
+    const dx = target.x - this.x, dy = target.y - this.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const targetSize = target.size || target.radius || 13;
+    if (dist > this.radius + targetSize + 3) {
+      const nx = dx / dist * this.speed;
+      const ny = dy / dist * this.speed;
+      // Nue flies, so arena walls do not block its movement. Keep it inside
+      // the outer arena boundary, but let it pass straight through wall tiles.
+      this.x = Math.max(this.radius + 4, Math.min(W - this.radius - 4, this.x + nx));
+      this.y = Math.max(this.radius + 4, Math.min(H - this.radius - 4, this.y + ny));
+    } else if (performance.now() - this.lastAttack >= this.attackCooldown) {
+      damageEnemy(this, target, this.attackDamage, 'nue');
+      if (target instanceof Player) {
+        target.stunnedUntil = Math.max(target.stunnedUntil || 0, performance.now() + NUE_STUN_DURATION);
+        target.charging = false;
+        target.dashing = false;
+        target.holdStartTime = null;
+      }
+      this.lastAttack = performance.now();
+    }
+    if (this.health <= 0) this.dead = true;
+  }
+  takeDamage(amount) {
+    this.health = Math.max(0, this.health - amount);
+    if (this.health <= 0) this.dead = true;
+  }
+  draw(ctx) {
+    if (this.dead) return;
+    ctx.save();
+    ctx.fillStyle = this.owner.color;
+    ctx.strokeStyle = this.owner.color;
+    ctx.shadowColor = this.owner.glow; ctx.shadowBlur = 10; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+    // Nue's symbol: a lightning bolt.
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.moveTo(5, -11); ctx.lineTo(-6, 1); ctx.lineTo(1, 1);
+    ctx.lineTo(-4, 11); ctx.lineTo(9, -3); ctx.lineTo(2, -3);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.restore();
+    drawPetHealth(ctx, this, 40, 6);
+  }
+}
+
+
+class RabbitEscapePet {
+  constructor(owner, x, y) {
+    this.owner = owner;
+    this.x = x;
+    this.y = y;
+    this.radius = 8;
+    this.size = 8;
+    this.health = 1;
+    this.maxHealth = 1;
+    this.speed = 2.9;
+    this.attackDamage = 0;
+    this.attackCooldown = 1000;
+    this.lastAttack = 0;
+    this.dead = false;
+    this.isPet = true;
+    this.petType = 3;
+    this.frozenUntil = 0;
+    this.stunnedUntil = 0;
+    this.pulled = false;
+    this.waveLockedUntil = 0;
+    this.knockback = null;
+    this.spawnTime = performance.now();
+    this.expiresAt = this.spawnTime + 11000;
+  }
+
+  isFrozen() { return performance.now() < this.frozenUntil; }
+
+  update(target) {
+    const now = performance.now();
+    if (now >= this.expiresAt) { this.dead = true; this.health = 0; return; }
+    if (this.dead || this.health <= 0 || !target || target.health <= 0) return;
+    if (this.pulled || this.isFrozen() || now < this.stunnedUntil || now < this.waveLockedUntil) return;
+
+    const dx = target.x - this.x, dy = target.y - this.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    if (dist > this.radius + (target.size || target.radius || 13) + 2) {
+      // Rabbit Escape rabbits cannot pass through arena walls.
+      const nx = this.x + dx / dist * this.speed;
+      const ny = this.y + dy / dist * this.speed;
+      if (petCanMoveTo(this, nx, ny)) {
+        this.x = nx; this.y = ny;
+      } else if (petCanMoveTo(this, nx, this.y)) {
+        this.x = nx;
+      } else if (petCanMoveTo(this, this.x, ny)) {
+        this.y = ny;
+      }
+    }
+  }
+
+  takeDamage(amount) {
+    this.health = Math.max(0, this.health - amount);
+    if (this.health <= 0) this.dead = true;
+  }
+
+  draw(ctx) {
+    if (this.dead) return;
+    ctx.save();
+    ctx.fillStyle = this.owner.color;
+    ctx.strokeStyle = this.owner.color;
+    ctx.shadowColor = this.owner.glow;
+    ctx.shadowBlur = 7;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Use the exact same five-circle symbol as the one displayed on Megumi.
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.fillStyle = '#000';
+    const circlePositions = [[0,0],[-3.2,-2.7],[3.2,-2.7],[-3.2,2.7],[3.2,2.7]];
+    const circleR = 1.45;
+    for (const [cx, cy] of circlePositions) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, circleR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.restore();
+    drawPetHealth(ctx, this, 28, 5);
+  }
+}
+
+class MahoragaPet {
+  constructor(owner, target) {
+    this.owner = owner; // Megumi
+    this.target = target; // the enemy it hunts
+    this.x = owner.x;
+    this.y = owner.y;
+    this.health = MAHORAGA_HEALTH;
+    this.maxHealth = MAHORAGA_HEALTH;
+    this.size = MAHORAGA_SIZE;
+    this.lastContactTime = -Infinity;
+    this.adaptation = {}; // attackType -> how many times it's landed on the pet so far
+    this.spin = 0; // for the spinning-wheel visual
+    this.damaged = false; // flashes briefly after being hit
+    this.isPet = true;
+    this.petType = 4;
+    this.frozenUntil = 0; this.stunnedUntil = 0; this.pulled = false;
+    this.waveLockedUntil = 0; this.wavePinned = false; this.wavePinNextTick = 0;
+    this.knockback = null;
+    this.burnStartTime = 0; this.burnEndTime = 0; this.burnNextTickTime = Infinity;
+    this.burnDuration = FURNACE_BURN_DURATION_CENTER; this.burnSource = null;
+  }
+  isFrozen() { return performance.now() < this.frozenUntil; }
+
+  // Whether the pet (treated as a circle) can sit at this position — blocked
+  // by any active wall tile and by the arena edges, same margin as a player.
+  canMoveTo(x, y) {
+    if (x - this.size < 4 || x + this.size > W - 4) return false;
+    if (y - this.size < 4 || y + this.size > H - 4) return false;
+    for (const o of obstacles) {
+      if (isWallActive(o) && circleRectOverlap(x, y, this.size, o)) return false;
+    }
+    return true;
+  }
+
+  update() {
+    // Always retarget the nearest opposing entity, including enemy pets.
+    const nearestEnemy = getNearestEnemy(this);
+    if (nearestEnemy) this.target = nearestEnemy;
+    if (!this.target || this.target.health <= 0 || getSide(this.target) === getSide(this)) {
+      this.target = getNearestEnemy(this);
+    }
+    if (!this.target || this.target.health <= 0) return;
+
+    const dx = this.target.x - this.x;
+    const dy = this.target.y - this.y;
+    const dist = Math.hypot(dx, dy) || 1;
+
+    if (dist > MAHORAGA_CONTACT_RANGE) {
+      const newX = this.x + (dx / dist) * MAHORAGA_SPEED;
+      const newY = this.y + (dy / dist) * MAHORAGA_SPEED;
+      if (this.canMoveTo(newX, newY)) {
+        this.x = newX; this.y = newY;
+      } else if (this.canMoveTo(newX, this.y)) {
+        this.x = newX;
+      } else if (this.canMoveTo(this.x, newY)) {
+        this.y = newY;
+      }
+    }
+    this.x = Math.max(this.size, Math.min(W - this.size, this.x));
+    this.y = Math.max(this.size, Math.min(H - this.size, this.y));
+
+    const now = performance.now();
+    const targetSize = this.target.size || this.target.radius || 13;
+    if (dist <= MAHORAGA_CONTACT_RANGE + targetSize && now - this.lastContactTime >= MAHORAGA_CONTACT_COOLDOWN) {
+      this.lastContactTime = now;
+      // Re-coded explicitly: Mahoraga's contact attack always deals 20 damage.
+      damageEnemy(this, this.target, 20, 'mahoragaContact');
+    }
+  }
+
+  // Applies incoming damage, reduced by however many times this exact named
+  // attack has already connected with the pet — 5% less each time it lands,
+  // stacking without limit. Each attack type keeps its own separate count,
+  // so an attack the pet has never seen before still lands at full strength.
+  takeDamage(amount, attackType) {
+    const hitsSoFar = this.adaptation[attackType] || 0;
+    const multiplier = Math.max(0, 1 - hitsSoFar * MAHORAGA_ADAPTATION_STEP);
+    const dealt = roundDamage(amount * multiplier);
+    this.health = Math.max(0, this.health - dealt);
+    this.adaptation[attackType] = hitsSoFar + 1;
+    this.damaged = true;
+  }
+
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.fillStyle = this.owner.color;
+    ctx.strokeStyle = this.owner.color;
+    ctx.shadowColor = this.owner.glow;
+    ctx.shadowBlur = 14;
+    ctx.lineWidth = 3;
+
+    // Mahoraga is a filled circle with a fixed black Eight-Handled Helm symbol.
+    ctx.beginPath();
+    ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Eight-Handled Helm: a black wheel with eight fixed handles/spokes.
+    ctx.strokeStyle = '#000';
+    ctx.fillStyle = '#000';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.size * 0.72, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let i = 0; i < 8; i++) {
+      const angle = (i * Math.PI * 2) / 8;
+      const x1 = Math.cos(angle) * this.size * 0.16;
+      const y1 = Math.sin(angle) * this.size * 0.16;
+      const x2 = Math.cos(angle) * this.size * 0.72;
+      const y2 = Math.sin(angle) * this.size * 0.72;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x2, y2, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.arc(0, 0, this.size * 0.16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    drawPetHealth(ctx, this, 44, 6);
+  }
+}
+
+class Projectile {
+  constructor(x, y, vx, vy, color, owner, target, damage, hitRadius, isSlash, slashTilt, isPurple) {
+    this.x = x; this.y = y;
+    this.vx = vx; this.vy = vy;
+    this.color = color;
+    this.owner = owner;
+    this.target = target;
+    this.damage = damage;
+    this.hitRadius = hitRadius;
+    this.isSlash = isSlash;
+    this.slashTilt = slashTilt || 0; // radians, only used for the slash visual
+    this.isPurple = isPurple || false; // Gojo's Super: shatters walls instead of stopping
+    this.delayUntil = this.isPurple ? performance.now() + 1000 : 0; // Purple fires 1s after activation
+    this.hitEntities = new Set();
+    this.dead = false;
+  }
+
+  update() {
+    if (this.isPurple && performance.now() < this.delayUntil) return;
+    // Red gets a gentle homing nudge toward its target each frame; every
+    // other projectile (Purple, Piercing Blood, Dismantle/Cleave, Sukuna's
+    // slash) still travels in a dead straight line, no mid-flight auto-aim.
+    if (this.owner.shape === 'circle' && !this.isPurple) {
+      this.applyHoming();
+    }
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    if (this.x < 0 || this.x > W || this.y < 0 || this.y > H) {
+      this.dead = true;
+      return;
+    }
+
+    for (const o of obstacles) {
+      if (!isWallActive(o)) continue; // shattered tiles let projectiles pass
+      if (this.x > o.x && this.x < o.x + o.w && this.y > o.y && this.y < o.y + o.h) {
+        if (this.isPurple) {
+          damageWall(o, o.health); // Purple shatters any tile it touches outright
+          continue; // pierces straight through, unlike every other projectile
+        }
+        if (this.isSlash) {
+          damageWall(o, DISMANTLE_WALL_DAMAGE); // Sukuna's Dismantle
+        } else if (this.owner.shape === 'circle') {
+          // Gojo's Red: wall damage scales with how charged the shot was.
+          const t = (this.damage - CIRCLE_MIN_DAMAGE) / (CIRCLE_MAX_DAMAGE - CIRCLE_MIN_DAMAGE);
+          const wallDamage = roundDamage(1 + Math.max(0, Math.min(1, t)) * (7 - 1));
+          damageWall(o, wallDamage);
+        }
+        this.dead = true;
+        return;
+      }
+    }
+
+    let attackType;
+    if (this.isPurple) attackType = 'purple';
+    else if (this.isSlash) attackType = 'dismantle';
+    else if (this.owner.shape === 'square') attackType = 'piercingBlood';
+    else attackType = 'red';
+
+    if (this.isPurple) {
+      // Purple pierces through every enemy player and pet, damaging each entity once.
+      for (const entity of getAllEntities()) {
+        if (!entity || entity === this.owner || getSide(entity) === getSide(this.owner) ||
+            entity.health <= 0 || this.hitEntities.has(entity)) continue;
+        const dist = Math.hypot(this.x - entity.x, this.y - entity.y);
+        if (dist < (entity.size || entity.radius || 0) + this.hitRadius) {
+          this.hitEntities.add(entity);
+          damageEnemy(this.owner, entity, this.damage, attackType);
+        }
+      }
+    } else if (this.target && this.target.health > 0) {
+      const dist = Math.hypot(this.x - this.target.x, this.y - this.target.y);
+      if (dist < this.target.size + this.hitRadius) {
+        this.dead = true;
+        damageEnemy(this.owner, this.target, this.damage, attackType);
+      }
+    }
+  }
+
+  // Steers this projectile's velocity a little closer to pointing straight at
+  // its target, without changing its speed — used for Red's mild homing.
+  applyHoming() {
+    const dx = this.target.x - this.x;
+    const dy = this.target.y - this.y;
+    if (dx === 0 && dy === 0) return;
+    const desiredAngle = Math.atan2(dy, dx);
+    const curAngle = Math.atan2(this.vy, this.vx);
+    let diff = desiredAngle - curAngle;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const turn = Math.max(-RED_HOMING_TURN_RATE, Math.min(RED_HOMING_TURN_RATE, diff));
+    const speed = Math.hypot(this.vx, this.vy);
+    const newAngle = curAngle + turn;
+    this.vx = Math.cos(newAngle) * speed;
+    this.vy = Math.sin(newAngle) * speed;
+  }
+
+  draw() {
+    ctx.save();
+    if (this.isSlash) {
+      // Wide slash swipe: a thin blade/line oriented along its travel direction,
+      // with the long edge pointing toward the enemy, tilted left/right (Dismantle).
+      const angle = Math.atan2(this.vy, this.vx) + Math.PI / 2 + this.slashTilt;
+      ctx.translate(this.x, this.y);
+      ctx.rotate(angle);
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = SLASH_THICKNESS;
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = 0.9;
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(-SLASH_LENGTH / 2, 0);
+      ctx.lineTo(SLASH_LENGTH / 2, 0);
+      ctx.stroke();
+    } else if (this.owner.shape === 'square') {
+      // Choso's Piercing Blood: a wide streak of blood oriented along its
+      // direction of travel, instead of a plain small dot.
+      const angle = Math.atan2(this.vy, this.vx);
+      ctx.translate(this.x, this.y);
+      ctx.rotate(angle);
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = SQUARE_PROJECTILE_VISUAL_WIDTH;
+      ctx.lineCap = 'round';
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.moveTo(-SQUARE_PROJECTILE_VISUAL_LENGTH / 2, 0);
+      ctx.lineTo(SQUARE_PROJECTILE_VISUAL_LENGTH / 2, 0);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = this.color;
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.hitRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+let projectiles = [];
+
+// Sukuna's Super: Furnace. Travels in a straight line and explodes on the
+// first wall or the enemy it touches — one-shotting every wall tile within
+// the blast radius, and if the enemy is also caught in that radius, hitting
+// them with a big upfront burst plus a burn/slow that plays out over time.
+class FurnaceShot {
+  constructor(x, y, vx, vy, owner, target) {
+    this.x = x; this.y = y;
+    this.vx = vx; this.vy = vy;
+    this.owner = owner;
+    this.target = target;
+    this.dead = false;
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+
+    if (this.x < 0 || this.x > W || this.y < 0 || this.y > H) {
+      this.dead = true;
+      return;
+    }
+
+    for (const o of obstacles) {
+      if (!isWallActive(o)) continue;
+      if (this.x > o.x && this.x < o.x + o.w && this.y > o.y && this.y < o.y + o.h) {
+        this.explode();
+        this.dead = true;
+        return;
+      }
+    }
+
+    const dist = Math.hypot(this.x - this.target.x, this.y - this.target.y);
+    if (dist < this.target.size + FURNACE_PROJECTILE_RADIUS) {
+      this.explode();
+      this.dead = true;
+    }
+  }
+
+  explode() {
+    // One-shot every wall tile within the blast radius.
+    for (const o of obstacles) {
+      if (!isWallActive(o)) continue;
+      if (circleRectOverlap(this.x, this.y, FURNACE_SPLASH_RADIUS, o)) {
+        damageWall(o, o.health);
+      }
+    }
+
+    // If the enemy is also caught in the blast, hit them and start the burn.
+    // How close they were to the blast center decides the split between
+    // upfront damage and burn duration (see constants above).
+    const dist = Math.hypot(this.x - this.target.x, this.y - this.target.y);
+    if (dist <= FURNACE_SPLASH_RADIUS) {
+      const t = Math.min(1, dist / FURNACE_SPLASH_RADIUS); // 0 = center, 1 = edge
+      const impactDamage = roundDamage(
+        FURNACE_IMPACT_DAMAGE_CENTER + t * (FURNACE_IMPACT_DAMAGE_EDGE - FURNACE_IMPACT_DAMAGE_CENTER)
+      );
+      const burnDuration =
+        FURNACE_BURN_DURATION_CENTER + t * (FURNACE_BURN_DURATION_EDGE - FURNACE_BURN_DURATION_CENTER);
+
+      damageEnemy(this.owner, this.target, impactDamage, 'furnace');
+      if (this.target.health <= 0) {
+        if (this.target instanceof Player) handleRoundWin(this.owner, this.target);
+        return;
+      }
+      const now = performance.now();
+      this.target.burnStartTime = now;
+      this.target.burnEndTime = now + burnDuration;
+      this.target.burnDuration = burnDuration;
+      this.target.burnNextTickTime = now + FURNACE_BURN_TICK_INTERVAL;
+      this.target.burnSource = this.owner;
+    }
+  }
+
+  draw() {
+    ctx.save();
+    ctx.fillStyle = this.owner.color;
+    ctx.shadowColor = this.owner.color;
+    ctx.shadowBlur = 18;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, FURNACE_PROJECTILE_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+let furnaceShots = [];
+
+// Ticks Sukuna's Furnace burn on a player, once per second while it's active.
+function processBurn(entity) {
+  const now = performance.now();
+  if (now >= entity.burnEndTime) return;
+  if (now < entity.burnNextTickTime) return;
+
+  entity.burnNextTickTime += FURNACE_BURN_TICK_INTERVAL;
+  damageEnemy(entity.burnSource || null, entity, FURNACE_BURN_TICK_DAMAGE, 'furnaceBurn');
+  if (entity.health <= 0 && entity instanceof Player) {
+    handleRoundWin(entity.burnSource, entity);
+  }
+}
+
+// Gojo's secondary ability: a slow orb that travels a limited distance (or
+// stops sooner at the edge of the arena), then lingers briefly. Captured wall
+// tiles pack onto a TILE-sized grid from dead-center outward, nearest cell
+// first. The enemy, if captured, always sits in whichever cell is the next
+// one out past the walls — so a wall grabbed after the enemy bumps them
+// outward and takes the more central cell instead. The enemy takes one hit
+// of chip damage on contact, then stays stuck until the orb disappears. Wall
+// tiles get dragged the same way, but take no damage.
+class PullOrb {
+  constructor(x, y, vx, vy, owner, target) {
+    this.x = x; this.y = y;
+    this.vx = vx; this.vy = vy;
+    this.owner = owner;
+    this.target = target;
+    this.travelled = 0;
+    this.lingering = false;
+    this.lingerEnd = 0;
+    this.wallCells = []; // [{ ref, col, row }, ...] — walls, packed from the center out
+    this.targetRef = null; // the captured enemy, if any
+    this.targetCell = null; // { col, row } — always the next free cell past the walls
+    this.dead = false;
+  }
+
+  release() {
+    if (this.targetRef) this.targetRef.pulled = false;
+    this.wallCells = [];
+    this.targetRef = null;
+    this.targetCell = null;
+  }
+
+  // Finds the cell closest to dead-center not in the given occupied set.
+  // Searches outward ring by ring so ties go to whichever cell is nearest.
+  findFreeCell(occupied) {
+    if (!occupied.has('0,0')) return { col: 0, row: 0 };
+
+    for (let ring = 1; ring <= 20; ring++) {
+      const ringCells = [];
+      for (let col = -ring; col <= ring; col++) {
+        for (let row = -ring; row <= ring; row++) {
+          if (Math.max(Math.abs(col), Math.abs(row)) !== ring) continue;
+          ringCells.push({ col, row });
+        }
+      }
+      ringCells.sort((a, b) => (a.col * a.col + a.row * a.row) - (b.col * b.col + b.row * b.row));
+      for (const cell of ringCells) {
+        if (!occupied.has(`${cell.col},${cell.row}`)) return cell;
+      }
+    }
+    return { col: 0, row: 0 }; // fallback; shouldn't be reachable in practice
+  }
+
+  // The enemy always occupies the nearest free cell that isn't claimed by a
+  // wall — i.e. the layer immediately outside the current wall cluster.
+  repositionTarget() {
+    if (!this.targetRef) return;
+    const occupied = new Set(this.wallCells.map(e => `${e.col},${e.row}`));
+    this.targetCell = this.findFreeCell(occupied);
+  }
+
+  capture(kind, ref) {
+    if (kind === 'wall') {
+      const occupied = new Set(this.wallCells.map(e => `${e.col},${e.row}`));
+      const cell = this.findFreeCell(occupied);
+      this.wallCells.push({ ref, col: cell.col, row: cell.row });
+      this.repositionTarget(); // a wall can take the enemy's old spot — bump them outward
+    } else {
+      ref.pulled = true;
+      this.targetRef = ref;
+      this.repositionTarget();
+    }
+  }
+
+  update() {
+    if (!this.lingering) {
+      const nextX = this.x + this.vx;
+      const nextY = this.y + this.vy;
+      const clampedX = Math.min(Math.max(nextX, PULL_ORB_RADIUS), W - PULL_ORB_RADIUS);
+      const clampedY = Math.min(Math.max(nextY, PULL_ORB_RADIUS), H - PULL_ORB_RADIUS);
+      const hitEdge = clampedX !== nextX || clampedY !== nextY;
+      this.x = clampedX;
+      this.y = clampedY;
+      this.travelled += Math.hypot(this.vx, this.vy);
+      if (hitEdge || this.travelled >= PULL_MAX_RANGE) {
+        this.lingering = true;
+        this.lingerEnd = performance.now() + PULL_LINGER_MS;
+      }
+    } else if (performance.now() >= this.lingerEnd) {
+      this.dead = true;
+      this.release();
+      return;
+    }
+
+    // Drag along anything already captured, keeping it locked to its cell.
+    for (const entry of this.wallCells) {
+      const offsetX = entry.col * TILE, offsetY = entry.row * TILE;
+      entry.ref.x = this.x + offsetX - entry.ref.w / 2;
+      entry.ref.y = this.y + offsetY - entry.ref.h / 2;
+    }
+    if (this.targetRef && this.targetCell) {
+      let px = this.x + this.targetCell.col * TILE;
+      let py = this.y + this.targetCell.row * TILE;
+      // Dragging bypasses normal movement, so clamp back to the same small
+      // buffer canMoveTo enforces everywhere else — keeps them from ending
+      // up flush against the arena edge if the orb parked itself there.
+      const marginX = this.targetRef.size + 4;
+      const marginY = this.targetRef.size + 4;
+      px = Math.min(Math.max(px, marginX), W - marginX);
+      py = Math.min(Math.max(py, marginY), H - marginY);
+      this.targetRef.x = px;
+      this.targetRef.y = py;
+    }
+
+    if (!this.targetRef) {
+      const dist = Math.hypot(this.target.x - this.x, this.target.y - this.y);
+      if (dist < PULL_ORB_RADIUS + this.target.size) {
+        // Contact: one hit of chip damage, then they're pulled in and stuck.
+        damageEnemy(this.owner, this.target, PULL_DAMAGE, 'pull');
+        this.capture('target', this.target);
+        // Pets can be killed by the orb without ending the round.
+        if (this.target.health <= 0 && this.target instanceof MahoragaPet && this.target.owner.mahoragaPet === this.target) {
+          this.target.owner.mahoragaPet = null;
+        }
+      } else if (dist < PULL_TRIGGER_RADIUS) {
+        // Not touching yet — magnet-pull them closer.
+        const pullDist = Math.max(dist, 1);
+        const stepX = ((this.x - this.target.x) / pullDist) * PULL_STRENGTH;
+        const stepY = ((this.y - this.target.y) / pullDist) * PULL_STRENGTH;
+        const newX = this.target.x + stepX;
+        const newY = this.target.y + stepY;
+        if (this.target.canMoveTo(newX, newY, this.owner, true)) {
+          this.target.x = newX;
+          this.target.y = newY;
+        }
+      }
+    }
+
+    // Pick up any wall tile it touches — dragged along, but never damaged.
+    for (const o of obstacles) {
+      if (!isWallActive(o)) continue; // shattered tiles are gone, nothing to grab
+      if (this.wallCells.some(e => e.ref === o)) continue;
+      if (circleRectOverlap(this.x, this.y, PULL_ORB_RADIUS, o)) {
+        this.capture('wall', o);
+      }
+    }
+  }
+
+  draw() {
+    ctx.save();
+    ctx.fillStyle = this.owner.color;
+    ctx.shadowColor = this.owner.color;
+    ctx.shadowBlur = 16;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, PULL_ORB_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+let pullOrbs = [];
+
+function tryShoot(shooter, target) {
+  if (isPaused || roundOver || isDisabled(shooter)) return;
+  const now = performance.now();
+  const cooldown = shooter.shape === 'rhombus' ? SLASH_COOLDOWN : SHOT_COOLDOWN;
+  if (now - shooter.lastShotTime < cooldown) return;
+  shooter.lastShotTime = now;
+
+  const dx = target.x - shooter.x;
+  const dy = target.y - shooter.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const vx = (dx / dist) * PROJECTILE_SPEED;
+  const vy = (dy / dist) * PROJECTILE_SPEED;
+
+  if (shooter.shape === 'rhombus') {
+    const tiltSign = Math.random() < 0.5 ? -1 : 1;
+    const tiltRad = (SLASH_TILT_DEG * Math.PI / 180) * tiltSign;
+    projectiles.push(new Projectile(
+      shooter.x, shooter.y, vx, vy, shooter.color, shooter, target,
+      SLASH_DAMAGE, SLASH_HIT_RADIUS, true, tiltRad
+    ));
+  } else {
+    projectiles.push(new Projectile(
+      shooter.x, shooter.y, vx, vy, shooter.color, shooter, target,
+      SHOT_DAMAGE, PROJECTILE_RADIUS, false
+    ));
+  }
+}
+
+// Using Naoya's attack or ability cancels his active Super, but does not
+// cancel the action that triggered it. The Super's cooldown starts immediately.
+function cancelNaoyaSuperForAction(shooter) {
+  if (shooter.shape !== 'triangle' || !shooter.speedBoostActive) return;
+  shooter.speedBoostActive = false;
+  shooter.superLastUsed = performance.now();
+  shooter.speedBoostActivatedAt = 0;
+  shooter.speedBoostStartTime = 0;
+  shooter.speedBoostLastMoveTime = 0;
+  shooter.speedHitLastTime = -Infinity;
+}
+
+// Circle attack: tap for a quick 10-damage shot, hold up to 3 seconds to
+// charge it up to a 25-damage shot. The projectile grows to match.
+// Frozen players, ones mid-flight from a knockback, and ones stuck inside a
+// Pull Orb can't act at all. Naoya also can't attack while his Super speed
+// boost is running — his offense while boosted is the contact damage instead.
+function isDisabled(player) {
+  return player.isFrozen() || performance.now() < player.stunnedUntil || player.knockback !== null || player.pulled;
+}
+
+function handleShootKeyDown(shooter, target) {
+  if (isPaused || roundOver) return;
+  cancelNaoyaSuperForAction(shooter);
+  if (isDisabled(shooter)) return;
+  if (shooter.shape === 'circle') {
+    if (shooter.charging) return;
+    if (performance.now() - shooter.lastShotTime < SHOT_COOLDOWN) return;
+    shooter.charging = true;
+    shooter.chargeStart = performance.now();
+    shooter.chargeTarget = target;
+  } else if (shooter.shape === 'triangle') {
+    startDash(shooter, target);
+  } else if (shooter.shape === 'square') {
+    // Square streams projectiles continuously while held; see maybeStreamFire
+    // in the main loop. Nothing to do on the initial keydown itself.
+  } else if (shooter.shape === 'rhombus') {
+    tryShoot(shooter, target);
+  } else if (shooter.shape === 'star') {
+    attemptMegumiStrike(shooter, target);
+  }
+}
+
+// Megumi's attack: a short-range strike for 20 damage.
+function attemptMegumiStrike(shooter, target) {
+  const now = performance.now();
+  if (now - shooter.lastShotTime < MEGUMI_STRIKE_COOLDOWN) return;
+  shooter.lastShotTime = now;
+
+  const dist = Math.hypot(target.x - shooter.x, target.y - shooter.y);
+  if (dist > MEGUMI_STRIKE_RANGE + shooter.size + target.size) return; // out of range
+
+  damageEnemy(shooter, target, MEGUMI_STRIKE_DAMAGE, 'megumiStrike');
+}
+
+// Secondary ability (E for P1, U for P2). Only Gojo has one right now; other
+// shapes will get theirs later, so this is a no-op for them for now.
+function handleSpecialKeyDown(shooter, target) {
+  if (isPaused || roundOver) return;
+  cancelNaoyaSuperForAction(shooter);
+  if (isDisabled(shooter)) return;
+  if (!SPECIAL_SHAPES.includes(shooter.shape)) return;
+
+  if (shooter.shape === 'circle') {
+    const now = performance.now();
+    if (now - shooter.specialLastUsed < SPECIAL_COOLDOWN) return;
+    shooter.specialLastUsed = now;
+
+    // The orb's capture/drag mechanic is built around a player, not a pet,
+    // so Blue always aims at the real opposing player even if their pet is
+    // the nearer "enemy" for everything else.
+    const orbTarget = shooter === p1 ? p2 : p1;
+    const dx = orbTarget.x - shooter.x;
+    const dy = orbTarget.y - shooter.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const vx = (dx / dist) * PULL_ORB_SPEED;
+    const vy = (dy / dist) * PULL_ORB_SPEED;
+    pullOrbs.push(new PullOrb(shooter.x, shooter.y, vx, vy, shooter, orbTarget));
+  } else if (shooter.shape === 'rhombus') {
+    attemptCleave(shooter, target);
+  } else if (shooter.shape === 'square') {
+    // Choso's Flowing Scale: halve all incoming damage for 3 seconds.
+    const now = performance.now();
+    if (now - shooter.specialLastUsed < SCALE_COOLDOWN) return;
+    shooter.specialLastUsed = now;
+    shooter.scaleUntil = now + SCALE_DURATION;
+  } else if (shooter.shape === 'triangle') {
+    attemptFreeze(shooter, target);
+  } else if (shooter.shape === 'star') {
+    attemptMegumiAbility(shooter);
+  }
+}
+
+
+function attemptMegumiAbility(shooter) {
+  if (!shooter.megumiAbilityReady || !shooter.megumiNextPetType) return;
+  const petType = shooter.megumiNextPetType;
+  shooter.megumiLastSpawnedType = petType;
+
+  // Only one pet type can belong to a Megumi at a time. Recasting a type
+  // removes every existing pet of that type and replaces it at full health.
+  activePets = activePets.filter(p => !(p && p.owner === shooter && p.petType === petType));
+
+  if (petType === 1) {
+    activePets.push(
+      new DivineDogPet(shooter, shooter.x - 24, shooter.y),
+      new DivineDogPet(shooter, shooter.x + 24, shooter.y)
+    );
+  } else if (petType === 2) {
+    activePets.push(new NuePet(shooter, shooter.x, shooter.y));
+  } else if (petType === 3) {
+    // Rabbit Escape: one summon made of ten tiny, harmless rabbits.
+    for (let i = 0; i < 15; i++) {
+      const angle = (i * Math.PI * 2) / 15;
+      activePets.push(new RabbitEscapePet(
+        shooter,
+        shooter.x + Math.cos(angle) * 22,
+        shooter.y + Math.sin(angle) * 22
+      ));
+    }
+  }
+
+  shooter.megumiAbilityReady = false;
+  shooter.megumiNextPetType = null;
+  shooter.megumiAbilityChargeStart = performance.now();
+
+  // In online mode, this request has now been consumed.
+  // Reset it so the next 5-second recharge can request a fresh
+  // Shikigami from the server instead of getting stuck forever.
+  if (onlineMode && onlineMatchStarted) {
+    onlineMegumiRequestSent[getSide(shooter)] = false;
+  }
+}
+
+function updateMegumiAbility(player) {
+  if (player.shape !== 'star') return;
+  if (player.megumiAbilityReady) {
+    if (!player.megumiNextPetType) {
+      if (onlineMode && onlineMatchStarted) {
+        const num = getSide(player);
+        if (!onlineMegumiRequestSent[num]) {
+          onlineMegumiRequestSent[num] = true;
+          onlineSend({ type:'megumi-pet-request', playerNumber:num });
+        }
+      } else {
+        player.megumiNextPetType = MEGUMI_PET_TYPES[Math.floor(Math.random() * MEGUMI_PET_TYPES.length)];
+      }
+    }
+    return;
+  }
+  const now = performance.now();
+  if (now - player.megumiAbilityChargeStart >= MEGUMI_ABILITY_CHARGE_MS) {
+    player.megumiAbilityReady = true;
+    if (onlineMode && onlineMatchStarted) {
+      const num = getSide(player);
+      if (!onlineMegumiRequestSent[num]) {
+        onlineMegumiRequestSent[num] = true;
+        onlineSend({ type:'megumi-pet-request', playerNumber:num });
+      }
+    } else {
+      player.megumiNextPetType = MEGUMI_PET_TYPES[Math.floor(Math.random() * MEGUMI_PET_TYPES.length)];
+    }
+  }
+}
+
+// Naoya's Freezeframe: a point-blank freeze that locks the enemy in place for
+// 1.5 seconds. Dash into them while they're frozen and they get launched.
+// A Mahoraga pet has no such state to lock, so freezing one is a wasted cast.
+function attemptFreeze(shooter, target) {
+  const now = performance.now();
+  if (now - shooter.specialLastUsed < FREEZE_COOLDOWN) return;
+
+  const dist = Math.hypot(target.x - shooter.x, target.y - shooter.y);
+  shooter.specialLastUsed = now;
+
+  // The ability can always be cast. If the enemy is outside the effect
+  // radius, the cast simply has no target to freeze.
+  if (dist > FREEZE_RANGE + shooter.size + target.size) return;
+
+  target.frozenUntil = now + FREEZE_DURATION;
+  target.charging = false;
+  target.dashing = false;
+  target.holdStartTime = null;
+}
+
+// Launch a frozen target away from Naoya. If the flight ends against a wall,
+// they eat extra damage on impact.
+function applyKnockback(shooter, target) {
+  const dx = target.x - shooter.x;
+  const dy = target.y - shooter.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  target.knockback = {
+    dirX: dx / dist,
+    dirY: dy / dist,
+    remaining: KNOCKBACK_DISTANCE,
+    source: shooter,
+  };
+}
+
+// Sukuna's Cleave: a close-range hit worth 20 damage, and 10 damage to any wall
+// tile in the same swing. Usable 3 times back to back, then it needs a few
+// seconds to recharge all 3 uses at once.
+function attemptCleave(shooter, target) {
+  if (shooter.cleaveCharges <= 0) return; // recharging, can't use yet
+
+  const dist = Math.hypot(target.x - shooter.x, target.y - shooter.y);
+  const hitsTarget = dist <= CLEAVE_RANGE + shooter.size + target.size;
+  const hitWalls = obstacles.filter(o =>
+    isWallActive(o) && circleRectOverlap(shooter.x, shooter.y, CLEAVE_RANGE + shooter.size, o));
+
+  // Cleave can always be cast while a charge remains. If there is no enemy
+  // or wall in range, the cast still consumes a charge but has no hit effect.
+  shooter.cleaveCharges -= 1;
+
+  if (hitsTarget) {
+    damageEnemy(shooter, target, CLEAVE_DAMAGE, 'cleave');
+  }
+  for (const wall of hitWalls) {
+    damageWall(wall, CLEAVE_WALL_DAMAGE);
+  }
+
+  if (shooter.cleaveCharges <= 0) {
+    shooter.cleaveCooldownEnd = performance.now() + CLEAVE_COOLDOWN;
+  }
+}
+
+function maybeRefillCleave(player) {
+  if (player.shape === 'rhombus' && player.cleaveCharges <= 0 &&
+      performance.now() >= player.cleaveCooldownEnd) {
+    player.cleaveCharges = CLEAVE_MAX_CHARGES;
+  }
+}
+
+// Triangle attack: a fast dash that passes through the enemy (but not walls),
+// dealing damage on contact. Dashes in the last direction moved, or toward
+// the enemy if the player hasn't moved yet.
+function startDash(shooter, target) {
+  if (shooter.dashing) return;
+  const now = performance.now();
+  if (now - shooter.lastShotTime < DASH_COOLDOWN) return;
+  shooter.lastShotTime = now;
+
+  let dirX, dirY;
+  if (now - shooter.lastMoveTime >= DASH_STILL_THRESHOLD) {
+    const dx = target.x - shooter.x;
+    const dy = target.y - shooter.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    dirX = dx / dist; dirY = dy / dist;
+  } else {
+    dirX = shooter.lastDir.x; dirY = shooter.lastDir.y;
+  }
+
+  shooter.dashing = true;
+  shooter.dashDir = { x: dirX, y: dirY };
+  shooter.dashEndTime = now + DASH_DURATION;
+  shooter.dashHasHit = false;
+  shooter.dashTarget = target;
+}
+
+function handleShootKeyUp(shooter) {
+  if (shooter.shape === 'circle' && shooter.charging) {
+    fireChargedShot(shooter, shooter.chargeTarget);
+    shooter.charging = false;
+  }
+  if (shooter.shape === 'square') {
+    shooter.holdStartTime = null;
+  }
+}
+
+function fireChargedShot(shooter, target) {
+  if (isPaused || roundOver || !target || isDisabled(shooter)) return;
+  const now = performance.now();
+  const heldMs = Math.min(now - shooter.chargeStart, CIRCLE_MAX_CHARGE_MS);
+  const t = heldMs / CIRCLE_MAX_CHARGE_MS; // 0 (tap) .. 1 (held 2.5s)
+  const damage = roundDamage(CIRCLE_MIN_DAMAGE + t * (CIRCLE_MAX_DAMAGE - CIRCLE_MIN_DAMAGE));
+  const radius = CIRCLE_MIN_RADIUS + t * (CIRCLE_MAX_RADIUS - CIRCLE_MIN_RADIUS);
+  shooter.lastShotTime = now;
+
+  const dx = target.x - shooter.x;
+  const dy = target.y - shooter.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const vx = (dx / dist) * PROJECTILE_SPEED;
+  const vy = (dy / dist) * PROJECTILE_SPEED;
+
+  projectiles.push(new Projectile(
+    shooter.x, shooter.y, vx, vy, shooter.color, shooter, target,
+    damage, radius, false
+  ));
+}
+
+const START_P1 = { x: 120, y: H / 2 };
+const START_P2 = { x: W - 120, y: H / 2 };
+
+const p1 = new Player(START_P1.x, START_P1.y, 16, getVar('--p1'), getVar('--p1-glow'), 'circle',
+  { up: 'w', down: 's', left: 'a', right: 'd' });
+const p2 = new Player(START_P2.x, START_P2.y, 16, getVar('--p2'), getVar('--p2-glow'), 'square',
+  { up: 'arrowup', down: 'arrowdown', left: 'arrowleft', right: 'arrowright' });
+
+// Reflect default shapes as selected in the character select screen.
+selectShape(1, p1.shape);
+selectShape(2, p2.shape);
+
+// ---------------------------------------------------------------
+// Round / win handling
+// ---------------------------------------------------------------
+let roundOver = false;
+let winBanner = null; // { player, timeLeft }
+let roundStartTime = performance.now(); // reset each round; gates Gojo's Super unlock
+
+function updateScoreboard() {
+  p1ScoreEl.textContent = `Player 1 wins: ${p1.score}`;
+  p2ScoreEl.textContent = `Player 2 wins: ${p2.score}`;
+}
+
+function handleRoundWin(winner, loser) {
+  // Only defeating an actual player ends the round. Pets can be defeated
+  // without awarding a win or ending the match.
+  if (!(loser instanceof Player)) return;
+  const actualWinner = winner && winner.owner instanceof Player ? winner.owner : winner;
+  if (!(actualWinner instanceof Player)) return;
+
+  if (roundOver) return;
+  roundOver = true;
+  actualWinner.score += 1;
+  updateScoreboard();
+  winBanner = { player: actualWinner, timeLeft: WIN_BANNER_DURATION };
+  for (const k of trackedKeys) keys[k] = false;
+
+  if (onlineMode && onlineConnected && onlineMatchStarted && !onlineRoundEndSent) {
+    onlineRoundEndSent = true;
+    onlineSend({ type:'round-end', winnerNumber: getSide(actualWinner) });
+  }
+
+  setTimeout(() => {
+    // If either player chose Random, the server rolls the next-round characters once
+    // and sends the same result to both computers.
+    if (onlineMode && onlineConnected && onlineMatchStarted) {
+      onlineSend({ type:'next-round' });
+    } else {
+      if (p1.useRandomShape) p1.shape = randomShape();
+      if (p2.useRandomShape) p2.shape = randomShape();
+      updateLegend();
+      resetRound();
+    }
+    roundOver = false;
+    winBanner = null;
+  }, WIN_BANNER_DURATION);
+}
+
+function resetRound() {
+  activePets.length = 0;
+  onlineRoundEndSent = false;
+  onlineRoundResetPending = false;
+  roundStartTime = performance.now(); // restarts every Super's unlock timer
+  p1.x = START_P1.x; p1.y = START_P1.y;
+  p2.x = START_P2.x; p2.y = START_P2.y;
+  p1.maxHealth = MAX_HEALTH_BY_SHAPE[p1.shape] ?? MAX_HEALTH;
+  p2.maxHealth = MAX_HEALTH_BY_SHAPE[p2.shape] ?? MAX_HEALTH;
+  p1.health = p1.maxHealth; p2.health = p2.maxHealth;
+  p1.damaged = false; p2.damaged = false;
+  p1.charging = false; p2.charging = false;
+  p1.dashing = false; p2.dashing = false;
+  p1.lastDir = { x: 0, y: 0 }; p2.lastDir = { x: 0, y: 0 };
+  p1.lastMoveTime = -Infinity; p2.lastMoveTime = -Infinity;
+  p1.holdStartTime = null; p2.holdStartTime = null;
+  p1.overheating = false; p2.overheating = false;
+
+  // Everything on a timer starts the new round fresh: shot cooldowns, secondary
+  // ability cooldowns, Cleave charges, overheat, freezes and knockbacks.
+  for (const p of [p1, p2]) {
+    p.lastShotTime = -Infinity;
+    p.specialLastUsed = -Infinity;
+    p.megumiAbilityChargeStart = p.shape === 'star' ? performance.now() : 0;
+    
+      p.megumiAbilityReady = p.shape === 'star';
+    p.megumiNextPetType = null;
+    p.megumiLastSpawnedType = null;
+    p.superLastUsed = -Infinity;
+    p.speedBoostActive = false;
+    p.speedBoostActivatedAt = 0;
+    p.speedBoostStartTime = 0;
+    p.speedBoostLastMoveTime = 0;
+    p.speedHitLastTime = -Infinity;
+    p.cleaveCharges = CLEAVE_MAX_CHARGES;
+    p.cleaveCooldownEnd = 0;
+    p.cooldownEndTime = 0;
+    p.cooldownDuration = 0;
+    p.frozenUntil = 0;
+    p.stunnedUntil = 0;
+    p.knockback = null;
+    p.scaleUntil = 0;
+    p.pulled = false;
+    p.dashHasHit = false;
+    p.dashTarget = null;
+    p.chargeTarget = null;
+    p.burnStartTime = 0;
+    p.burnEndTime = 0;
+    p.burnDuration = FURNACE_BURN_DURATION_CENTER;
+    p.burnNextTickTime = Infinity;
+    p.burnSource = null;
+    p.wavingActive = false;
+    p.waveDir = { x: 1, y: 0 };
+    p.waveLength = 0;
+    p.waveStartTime = 0;
+    p.waveEndTime = 0;
+    p.waveHitTarget = false;
+    p.waveHitPet = false;
+    p.waveLockedUntil = 0;
+    p.wavePinned = false;
+    p.wavePinNextTick = 0;
+    p.mahoragaPet = null;
+  }
+
+  for (const o of obstacles) {
+    o.health = o.maxHealth; // walls come back fully repaired each round
+    o.x = o.homeX; o.y = o.homeY; // ...and back wherever a Pull Orb may have dragged them
+  }
+
+  projectiles = [];
+  pullOrbs = [];
+  furnaceShots = [];
+  for (const k of trackedKeys) keys[k] = false;
+}
+
+function drawArena() {
+  ctx.clearRect(0, 0, W, H);
+  for (const o of obstacles) {
+    const fraction = o.health / o.maxHealth; // 1 = untouched, 0 = fully shattered
+    if (fraction > 0) {
+      ctx.fillStyle = getVar('--wall');
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+    }
+    if (fraction < 1) {
+      // A black square grows from the tile's center as it loses health —
+      // scaled so the black portion's AREA matches the missing health share.
+      // At 0 health the wall itself is gone, but this square stays behind.
+      const side = o.w * Math.sqrt(1 - fraction);
+      const bx = o.x + o.w / 2 - side / 2;
+      const by = o.y + o.h / 2 - side / 2;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(bx, by, side, side);
+    }
+  }
+}
+
+function drawWinBanner() {
+  if (!winBanner) return;
+  const p = winBanner.player;
+  ctx.save();
+  ctx.font = 'bold 16px Segoe UI, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = p.color;
+  ctx.shadowColor = p.glow;
+  ctx.shadowBlur = 10;
+  ctx.fillText('WINS!', p.x, p.y - p.size - 26);
+  ctx.restore();
+}
+
+function maybeAutoCharge(shooter, target, held) {
+  if (!held || isPaused || roundOver || isDisabled(shooter)) return;
+  if (shooter.shape !== 'circle' || shooter.charging) return;
+  if (performance.now() - shooter.lastShotTime >= SHOT_COOLDOWN) {
+    shooter.charging = true;
+    shooter.chargeStart = performance.now();
+    shooter.chargeTarget = target;
+  }
+}
+
+// Square attack: fires a steady stream of 1-damage projectiles while the
+// shoot key is held. Holding for more than 4 seconds straight overheats it,
+// forcing a 2-second cooldown before it can fire again.
+function maybeStreamFire(shooter, target, held) {
+  if (shooter.shape !== 'square') return;
+
+  if (!held) {
+    shooter.holdStartTime = null;
+    return;
+  }
+  if (isPaused || roundOver || isDisabled(shooter) || shooter.wavingActive) return;
+
+  const now = performance.now();
+
+  if (shooter.overheating) {
+    if (now >= shooter.cooldownEndTime) {
+      shooter.overheating = false;
+      shooter.holdStartTime = now; // key is still held, resume streaming
+    } else {
+      return;
+    }
+  }
+
+  if (shooter.holdStartTime === null) shooter.holdStartTime = now;
+
+  if (now - shooter.holdStartTime >= SQUARE_OVERHEAT_THRESHOLD) {
+    shooter.overheating = true;
+    shooter.cooldownEndTime = now + SQUARE_OVERHEAT_COOLDOWN;
+    shooter.cooldownDuration = SQUARE_OVERHEAT_COOLDOWN;
+    shooter.holdStartTime = null;
+    return;
+  }
+
+  if (now - shooter.lastShotTime >= SQUARE_FIRE_RATE) {
+    shooter.lastShotTime = now;
+    const dx = target.x - shooter.x;
+    const dy = target.y - shooter.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const vx = (dx / dist) * SQUARE_PROJECTILE_SPEED;
+    const vy = (dy / dist) * SQUARE_PROJECTILE_SPEED;
+    projectiles.push(new Projectile(
+      shooter.x, shooter.y, vx, vy, shooter.color, shooter, target,
+      SQUARE_DAMAGE, SQUARE_PROJECTILE_RADIUS, false
+    ));
+  }
+}
+
+function getPlayerKeys(player) {
+  if (onlineMode && player !== onlineLocalPlayer()) return { w:false, a:false, s:false, d:false };
+  return keys;
+}
+function getPlayerHeld(player) {
+  if (onlineMode && player !== onlineLocalPlayer()) return onlineRemoteHeld;
+  return shootHeld;
+}
+
+function loop() {
+  if (!isPaused) {
+    if (!roundOver) {
+      const p1Held = onlineMode ? getPlayerHeld(p1) : shootHeld;
+      const p2Held = onlineMode ? getPlayerHeld(p2) : shootHeld;
+      maybeAutoCharge(p1, getNearestEnemy(p1) || p2, onlineMode ? !!p1Held.v : !!shootHeld.v);
+      maybeAutoCharge(p2, getNearestEnemy(p2) || p1, onlineMode ? !!p2Held.v : !!shootHeld.j);
+      maybeStreamFire(p1, getNearestEnemy(p1) || p2, onlineMode ? !!p1Held.v : !!shootHeld.v);
+      maybeStreamFire(p2, getNearestEnemy(p2) || p1, onlineMode ? !!p2Held.v : !!shootHeld.j);
+      processBurn(p1);
+      processBurn(p2);
+      maybeRefillCleave(p1);
+      maybeRefillCleave(p2);
+      updateMegumiAbility(p1);
+      updateMegumiAbility(p2);
+      p1.update(p2);
+      p2.update(p1);
+
+      // In online play, each browser is authoritative for its own player's
+      // position and health. Send the state after movement/physics for a
+      // smoother and more accurate remote view.
+      if (onlineMode && onlineConnected && onlineMatchStarted) {
+        const nowState = performance.now();
+        if (nowState - onlineLastStateSent >= ONLINE_STATE_SEND_MS) {
+          onlineLastStateSent = nowState;
+          const localState = onlineLocalPlayer();
+          onlineSend({ type:'game', data:{
+            kind:'state', x:localState.x, y:localState.y,
+            health:localState.health,
+            lastDir:localState.lastDir
+          }});
+        }
+      }
+      for (const proj of projectiles) proj.update();
+      projectiles = projectiles.filter(proj => !proj.dead);
+      for (const orb of pullOrbs) orb.update();
+      pullOrbs = pullOrbs.filter(orb => !orb.dead);
+      for (const shot of furnaceShots) shot.update();
+      furnaceShots = furnaceShots.filter(shot => !shot.dead);
+      for (const p of [p1, p2]) {
+        if (p.mahoragaPet) {
+          if (p.mahoragaPet.health <= 0) {
+            p.mahoragaPet = null; // destroyed — Megumi's on his own again
+          } else {
+            p.mahoragaPet.update();
+          }
+        }
+      }
+    }
+    drawArena();
+    for (const proj of projectiles) proj.draw();
+    for (const orb of pullOrbs) orb.draw();
+    for (const shot of furnaceShots) shot.draw();
+    for (const p of [p1, p2]) {
+      if (p.mahoragaPet) p.mahoragaPet.draw();
+    }
+    p1.draw();
+    p2.draw();
+    drawWinBanner();
+  }
+  
+  // Update every active Megumi pet. All pets use the same targeting/collision model.
+  for (let i = activePets.length - 1; i >= 0; i--) {
+    const pet = activePets[i];
+    if (pet.dead || pet.health <= 0) { activePets.splice(i, 1); continue; }
+    if (pet instanceof DivineDogPet || pet instanceof NuePet || pet instanceof RabbitEscapePet) pet.update(getNearestEnemy(pet));
+  }
+
+  // Pets are solid. Enemy players can push pets away instead of being pushed
+  // through them. Friendly players are also kept from overlapping pets.
+  const allPetsNow = getAllPets().filter(pet => pet && pet.health > 0);
+  for (const pet of allPetsNow) {
+    const radius = pet.radius || pet.size || 13;
+    for (const player of [p1, p2]) {
+      const dx = player.x - pet.x, dy = player.y - pet.y;
+      const dist = Math.hypot(dx, dy) || 0.001;
+      const minDist = player.size + radius;
+      if (dist < minDist) {
+        const push = minDist - dist;
+        const nx = dx / dist, ny = dy / dist;
+        if (getSide(pet) !== getSide(player)) {
+          // Enemy players can still push pets, but never through walls.
+          // Try the full separation first, then each axis independently.
+          const targetX = pet.x - nx * push;
+          const targetY = pet.y - ny * push;
+          if (petCanMoveTo(pet, targetX, targetY)) {
+            pet.x = targetX;
+            pet.y = targetY;
+          } else if (petCanMoveTo(pet, targetX, pet.y)) {
+            pet.x = targetX;
+          } else if (petCanMoveTo(pet, pet.x, targetY)) {
+            pet.y = targetY;
+          }
+        }
+        // Friendly/owner players do not collide with their own pets.
+        // Pets can freely pass through the user who summoned them.
+      }
+    }
+  }
+
+  // Pets are solid with each other too, so they cannot overlap or walk
+  // through one another.
+  for (let i = 0; i < allPetsNow.length; i++) {
+    for (let j = i + 1; j < allPetsNow.length; j++) {
+      const a = allPetsNow[i], b = allPetsNow[j];
+      const ar = a.radius || a.size || 13;
+      const br = b.radius || b.size || 13;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 0.001;
+      const minDist = ar + br;
+      if (dist < minDist) {
+        const push = (minDist - dist) / 2;
+        const nx = dx / dist, ny = dy / dist;
+        const aX = a.x - nx * push, aY = a.y - ny * push;
+        const bX = b.x + nx * push, bY = b.y + ny * push;
+        if (petCanMoveTo(a, aX, aY)) {
+          a.x = aX; a.y = aY;
+        } else if (petCanMoveTo(a, aX, a.y)) {
+          a.x = aX;
+        } else if (petCanMoveTo(a, a.x, aY)) {
+          a.y = aY;
+        }
+        if (petCanMoveTo(b, bX, bY)) {
+          b.x = bX; b.y = bY;
+        } else if (petCanMoveTo(b, bX, b.y)) {
+          b.x = bX;
+        } else if (petCanMoveTo(b, b.x, bY)) {
+          b.y = bY;
+        }
+      }
+    }
+  }
+
+  // Draw active pets after arena/projectiles so their circles and symbols are visible.
+  for (const pet of activePets) {
+    if (pet instanceof DivineDogPet || pet instanceof NuePet || pet instanceof RabbitEscapePet) pet.draw(ctx);
+  }
+
+
+requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
