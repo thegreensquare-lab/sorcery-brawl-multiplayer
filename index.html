@@ -405,6 +405,33 @@
     .mobile-action { width: 60px; height: 60px; font-size: 21px; }
   }
 
+  /* Landscape mobile: keep controls beside the arena instead of underneath it. */
+  @media (orientation: landscape) and (max-height: 700px) {
+    .mobile-multiplayer-active #mobileControls {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100vw;
+      height: 100vh;
+      padding: 12px 18px max(12px, env(safe-area-inset-bottom));
+      align-items: flex-end;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 50;
+    }
+    .mobile-multiplayer-active #mobileControls #mobileJoystick,
+    .mobile-multiplayer-active #mobileControls #mobileActionButtons {
+      pointer-events: auto;
+    }
+    .mobile-multiplayer-active #mobileJoystick {
+      margin-bottom: 0;
+    }
+    .mobile-multiplayer-active #mobileActionButtons {
+      margin-bottom: 0;
+    }
+  }
+
   /* ---------- Pause overlay ---------- */
   #pauseOverlay {
     display: none;
