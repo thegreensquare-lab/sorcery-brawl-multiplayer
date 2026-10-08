@@ -226,6 +226,9 @@
   .shape-swatch.shape-pentagon { clip-path: polygon(50% 0%, 100% 38.20%, 80.90% 100%, 19.10% 100%, 0% 38.20%); }
   .shape-swatch.shape-plus { clip-path: polygon(30.48% 0%, 69.52% 0%, 69.52% 30.48%, 100% 30.48%, 100% 69.52%, 69.52% 69.52%, 69.52% 100%, 30.48% 100%, 30.48% 69.52%, 0% 69.52%, 0% 30.48%, 30.48% 30.48%); }
   .shape-swatch.shape-x { clip-path: polygon(0% 0%, 50% 25%, 100% 0%, 75% 50%, 100% 100%, 50% 75%, 0% 100%, 25% 50%); }
+  .shape-swatch.shape-octagon { clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%); }
+  .shape-swatch.shape-octagon.todo-swatch, .shape-swatch.shape-octagon.yuji-swatch { display:flex; align-items:center; justify-content:center; font-weight:800; font-size:20px; color:#0d1117; }
+  .home-bouncer.shape-octagon { clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:20px; color:#0d1117; }
 .shape-swatch.shape-random {
     border-radius: 8px;
     display: flex;
@@ -609,6 +612,15 @@
       <div class="char-info-ability"><span class="ability-label">Ability</span> — <span class="ability-name">Hairpin</span>: Detonates every X marker on the ground at once, damaging enemies caught near the blasts.</div>
       <div class="char-info-ability"><span class="ability-label">Super</span> — <span class="ability-name">Resonance</span>: Uses an Enemy Piece to strike its linked enemy, dealing heavy damage and stunning them.</div>
     </div>
+    <div class="char-info-card">
+      <div class="char-info-header">
+        <div class="shape-swatch shape-octagon todo-swatch">T</div>
+        <h3>Todo / Yuji</h3>
+      </div>
+      <div class="char-info-ability"><span class="ability-label">Todo Attack</span> — <span class="ability-name">Takada-chan</span>: A short-range hit that deals 10 damage. If it misses, a semi-transparent Takada travels twice as far and deals half damage.</div>
+      <div class="char-info-ability"><span class="ability-label">Yuji Ability</span> — <span class="ability-name">Black Flash</span>: Dashes up to half the map. It passes through and instantly destroys bushes, stops when it hits a wall, and instantly destroys nearby breakable walls. Hitting an enemy deals 20 damage and gives Yuji 15-damage attacks for 3 seconds.</div>
+      <div class="char-info-ability"><span class="ability-label">Super</span> — <span class="ability-name">Switch</span>: Switches between Todo and Yuji.</div>
+    </div>
   </div>
   <button id="charInfoBackBtn">Back</button>
 </div>
@@ -644,6 +656,9 @@
         <button class="shape-option" data-shape="x">
           <div class="shape-swatch p1-color shape-x"></div><span>Nobara</span>
         </button>
+        <button class="shape-option" data-shape="octagon">
+          <div class="shape-swatch p1-color shape-octagon todo-swatch">T</div><span>Todo / Yuji</span>
+        </button>
         <button class="shape-option" data-shape="random">
           <div class="shape-swatch p1-color shape-random">?</div><span>Random</span>
         </button>
@@ -675,6 +690,9 @@
         </button>
         <button class="shape-option" data-shape="x">
           <div class="shape-swatch p2-color shape-x"></div><span>Nobara</span>
+        </button>
+        <button class="shape-option" data-shape="octagon">
+          <div class="shape-swatch p2-color shape-octagon todo-swatch">T</div><span>Todo / Yuji</span>
         </button>
         <button class="shape-option" data-shape="random">
           <div class="shape-swatch p2-color shape-random">?</div><span>Random</span>
@@ -756,7 +774,7 @@ const homeBouncerArena = document.getElementById('homeBouncerArena');
 
 // The home screen has one moving shape for every playable character. They use
 // the same geometric silhouettes as the character selector/in-game sprites.
-const HOME_BOUNCER_SHAPES = ['circle','square','triangle','rhombus','star','plus','pentagon','x'];
+const HOME_BOUNCER_SHAPES = ['circle','square','triangle','rhombus','star','plus','pentagon','x','todo','yuji'];
 let homeBouncers = [];
 let homeBouncerFrame = 0;
 let homeBouncerLastTime = 0;
@@ -765,7 +783,9 @@ function createHomeBouncers() {
   if (!homeBouncerArena || homeBouncers.length) return;
   homeBouncers = HOME_BOUNCER_SHAPES.map((shape, index) => {
     const el = document.createElement('div');
-    el.className = `home-bouncer shape-${shape} ${index % 2 ? 'p2-color' : 'p1-color'}`;
+    const actualShape = (shape === 'todo' || shape === 'yuji') ? 'octagon' : shape;
+    el.className = `home-bouncer shape-${actualShape} ${index % 2 ? 'p2-color' : 'p1-color'}`;
+    if (shape === 'todo' || shape === 'yuji') el.textContent = shape === 'todo' ? 'T' : 'Y';
     el.setAttribute('aria-hidden', 'true');
     homeBouncerArena.appendChild(el);
     return {
@@ -787,6 +807,22 @@ function bounceHomeBouncer(b) {
   b.isBlue = !b.isBlue;
   b.el.classList.toggle('p1-color', !b.isBlue);
   b.el.classList.toggle('p2-color', b.isBlue);
+}
+
+function swapHomeTodoYujiPositions(todo, yuji) {
+  if (!todo || !yuji) return;
+  const now = performance.now();
+  if (now - (todo.lastYujiHomeSwap || -Infinity) < 350) return;
+  todo.lastYujiHomeSwap = now;
+  yuji.lastYujiHomeSwap = now;
+  const tx = todo.x, ty = todo.y;
+  todo.x = yuji.x; todo.y = yuji.y;
+  yuji.x = tx; yuji.y = ty;
+}
+function homeTodoYujiCollisionSwap(b) {
+  if (!b || b.shape !== 'todo') return;
+  const yuji = homeBouncers.find(other => other.shape === 'yuji');
+  if (yuji) swapHomeTodoYujiPositions(b, yuji);
 }
 
 function updateHomeBouncers(now) {
@@ -834,6 +870,7 @@ function updateHomeBouncers(now) {
       b.isBlue = !b.isBlue;
       b.el.classList.toggle('p1-color', !b.isBlue);
       b.el.classList.toggle('p2-color', b.isBlue);
+      homeTodoYujiCollisionSwap(b);
     }
   }
 
@@ -867,12 +904,14 @@ function updateHomeBouncers(now) {
       a.el.classList.toggle('p2-color', a.isBlue);
       b.el.classList.toggle('p1-color', !b.isBlue);
       b.el.classList.toggle('p2-color', b.isBlue);
+      if (a.shape === 'todo') homeTodoYujiCollisionSwap(a);
+      if (b.shape === 'todo') homeTodoYujiCollisionSwap(b);
     }
   }
 
   for (const b of homeBouncers) {
-    const maxBX = Math.max(0, homeBouncerArena.clientWidth - b.size);
-    const maxBY = Math.max(0, homeBouncerArena.clientHeight - b.size);
+    const maxBX = Math.max(0, homeBouncerArena.clientWidth - 44);
+    const maxBY = Math.max(0, homeBouncerArena.clientHeight - 44);
     b.x = Math.max(0, Math.min(maxBX, b.x));
     b.y = Math.max(0, Math.min(maxBY, b.y));
     b.el.style.transform = `translate(${b.x}px, ${b.y}px)`;
@@ -1069,6 +1108,9 @@ function onlineSendStateSnapshot(force = false) {
   onlineSend({ type:'game', data:{
     kind:'state', stateSeq:++onlineStateSeq, roundSyncId:onlineRoundSyncId, mapIndex:currentMapIndex,
     x:localState.x, y:localState.y,
+    todoYujiMode: localState.todoYujiMode,
+    yujiSpeedStacks: localState.yujiSpeedStacks,
+    yujiSpeedBoostIn: Math.max(0, (localState.yujiSpeedBoostUntil || 0) - now),
     health:localState.health, healthRevision:onlineLocalHealthRevision,
     maxHealth:localState.maxHealth, lastDir:localState.lastDir,
     charging:!!localState.charging, dashing:!!localState.dashing,
@@ -1451,6 +1493,72 @@ function connectOnline(isMobile = false) {
       }
       return;
     }
+    if (msg.type === 'game' && msg.data && msg.data.kind === 'yuji-black-flash') {
+      const d = msg.data;
+      const owner = Number(d.playerNumber) === 1 ? p1 : p2;
+      if (owner && owner !== onlineLocalPlayer() && owner.shape === 'octagon' && owner.todoYujiMode === 'yuji') {
+        if (Number.isFinite(d.x)) owner.x = d.x;
+        if (Number.isFinite(d.y)) owner.y = d.y;
+        if (Number.isFinite(d.until)) owner.yujiBlackFlashUntil = performance.now() + Math.max(0, d.until);
+        if (Number.isFinite(d.angle)) {
+        }
+      }
+      return;
+    }
+    if (msg.type === 'game' && msg.data && msg.data.kind === 'yuji-black-flash-hit') {
+      const d = msg.data;
+      const owner = Number(d.playerNumber) === 1 ? p1 : p2;
+      if (owner && owner !== onlineLocalPlayer() && owner.shape === 'octagon') {
+        owner.yujiBlackFlashUntil = performance.now() + (Number.isFinite(d.until) ? Math.max(0, d.until) : 3000);
+        if (Number.isFinite(d.x) && Number.isFinite(d.y)) {
+        }
+      }
+      return;
+    }
+    if (msg.type === 'game' && msg.data && msg.data.kind === 'todo-yuji-switch') {
+      const d = msg.data;
+      const owner = Number(d.playerNumber) === 1 ? p1 : p2;
+      if (owner && owner !== onlineLocalPlayer() && owner.shape === 'octagon' && (d.mode === 'todo' || d.mode === 'yuji')) {
+        owner.todoYujiMode = d.mode;
+        owner.todoDirectHitCount = 0;
+        owner.todoLastDirectHitTime = 0;
+        applyTodoYujiSwitchBlast(owner, Number.isFinite(d.x) ? d.x : owner.x, Number.isFinite(d.y) ? d.y : owner.y);
+        updateLegend();
+      }
+      return;
+    }
+    if (msg.type === 'game' && msg.data && msg.data.kind === 'todo-boogie-swap') {
+      const d = msg.data;
+      const owner = Number(d.playerNumber) === 1 ? p1 : p2;
+      if (owner && owner !== onlineLocalPlayer() && owner.shape === 'octagon') {
+        if (Number.isFinite(d.todoX) && Number.isFinite(d.todoY)) { owner.x = d.todoX; owner.y = d.todoY; }
+        if (d.kind === 'wall' && Number.isInteger(d.wallIndex) && Number.isFinite(d.wallX) && Number.isFinite(d.wallY)) {
+          const wall = obstacles[d.wallIndex];
+          if (wall) { wall.x = d.wallX; wall.y = d.wallY; }
+        }
+        if (d.kind === 'player') {
+          const target = owner === p1 ? p2 : p1;
+          if (target && Number.isFinite(d.targetX) && Number.isFinite(d.targetY)) { target.x = d.targetX; target.y = d.targetY; }
+        }
+        if (d.kind === 'pet' && Number.isFinite(d.targetX) && Number.isFinite(d.targetY)) {
+          const pet = getAllPets().find(e => e && e.onlinePetId === d.petId);
+          if (pet) { pet.x = d.targetX; pet.y = d.targetY; }
+        }
+        slashEffects.push({ type:'todoBoogie', x:owner.x, y:owner.y, color:owner.color, radius:24, duration:220, start:performance.now() });
+      }
+      return;
+    }
+    if (msg.type === 'game' && msg.data && msg.data.kind === 'todo-switch') {
+      const d = msg.data;
+      const owner = Number(d.playerNumber) === 1 ? p1 : p2;
+      if (owner && owner !== onlineLocalPlayer() && owner.shape === 'octagon' && Number.isFinite(d.shooterX) && Number.isFinite(d.shooterY) && Number.isFinite(d.targetX) && Number.isFinite(d.targetY)) {
+        owner.x = d.shooterX; owner.y = d.shooterY;
+        const target = owner === p1 ? p2 : p1;
+        target.x = d.targetX; target.y = d.targetY;
+        slashEffects.push({ type:'todoSwitch', x:owner.x, y:owner.y, color:owner.color, radius:26, duration:220, start:performance.now() });
+      }
+      return;
+    }
     if (msg.type === 'game' && msg.data && msg.data.kind === 'state') {
       const d = msg.data;
       if (Number.isInteger(d.mapIndex) && d.mapIndex !== currentMapIndex) {
@@ -1466,6 +1574,12 @@ function connectOnline(isMobile = false) {
       if (Number.isFinite(d.stateSeq)) onlineRemoteStateSeq = d.stateSeq;
       if (Number.isFinite(d.x)) remote.x = d.x;
       if (Number.isFinite(d.y)) remote.y = d.y;
+      if (remote.shape === 'octagon' && (d.todoYujiMode === 'todo' || d.todoYujiMode === 'yuji')) {
+        remote.todoYujiMode = d.todoYujiMode;
+        updateLegend();
+      }
+      if (remote.shape === 'octagon' && Number.isFinite(d.yujiSpeedStacks)) remote.yujiSpeedStacks = Math.max(0, d.yujiSpeedStacks);
+      if (remote.shape === 'octagon' && Number.isFinite(d.yujiSpeedBoostIn)) remote.yujiSpeedBoostUntil = performance.now() + Math.max(0, d.yujiSpeedBoostIn);
       if (Number.isFinite(d.maxHealth)) remote.maxHealth = d.maxHealth;
       if (typeof d.charging === 'boolean') remote.charging = d.charging;
       if (typeof d.dashing === 'boolean') remote.dashing = d.dashing;
@@ -1760,7 +1874,15 @@ const ABILITY_NAMES = {
   plus: { main: 'Slash', secondary: 'Copy', super: 'Love Beam' },
   pentagon: { main: 'Shutter Doors', secondary: 'Dance', super: 'Idle Death Gamble' },
   x: { main: 'Nail Shot', secondary: 'Hairpin', super: 'Resonance' },
+  octagon: { main: 'Takada-chan / Punch', secondary: 'Boogie Woogie / Black Flash', super: 'Switch' },
 };
+
+function getActiveAbilityNames(player) {
+  if (player && player.shape === 'octagon' && player.todoYujiMode === 'yuji') {
+    return { main: 'Takada-chan', secondary: 'Black Flash', super: 'Switch' };
+  }
+  return ABILITY_NAMES[player.shape] || { main: '', secondary: '', super: '' };
+}
 
 function updateLegend() {
   const p1El = document.querySelector('.legend .p1');
@@ -1770,9 +1892,9 @@ function updateLegend() {
   if (p1.useRandomShape) {
     p1El.innerHTML = `Player 1 — <span class="key">WASD</span> move, sorcerer picked at random on load`;
   } else {
-    const n1 = ABILITY_NAMES[p1.shape];
+    const n1 = getActiveAbilityNames(p1);
     if (!n1.main) {
-      p1El.innerHTML = `Player 1 — <span class="key">WASD</span> move (abilities not yet defined)`;
+      p1El.innerHTML = `Player 1 — <span class="key">WASD</span> move, abilities not yet defined` + (n1.super ? `, <span class="key">N</span> ${n1.super}` : '');
     } else {
       p1El.innerHTML = `Player 1 — <span class="key">WASD</span> move, <span class="key">V</span> ${n1.main}` +
         (n1.secondary ? `, <span class="key">B</span> ${n1.secondary}` : '') +
@@ -1783,9 +1905,9 @@ function updateLegend() {
   if (p2.useRandomShape) {
     p2El.innerHTML = `Player 2 — <span class="key">Arrow Keys</span> move, sorcerer picked at random on load`;
   } else {
-    const n2 = ABILITY_NAMES[p2.shape];
+    const n2 = getActiveAbilityNames(p2);
     if (!n2.main) {
-      p2El.innerHTML = `Player 2 — <span class="key">Arrow Keys</span> move (abilities not yet defined)`;
+      p2El.innerHTML = `Player 2 — <span class="key">Arrow Keys</span> move, abilities not yet defined` + (n2.super ? `, <span class="key">L</span> ${n2.super}` : '');
     } else {
       p2El.innerHTML = `Player 2 — <span class="key">Arrow Keys</span> move, <span class="key">J</span> ${n2.main}` +
         (n2.secondary ? `, <span class="key">K</span> ${n2.secondary}` : '') +
@@ -1854,7 +1976,7 @@ document.querySelectorAll('.shape-grid').forEach(grid => {
 
 // Rolls a real shape for anyone with "Random" selected, right as the game loads.
 // Exactly 8 playable characters; Random chooses one of these and nothing else.
-const CHARACTER_SHAPES = ['circle', 'square', 'triangle', 'rhombus', 'star', 'pentagon', 'plus', 'x'];
+const CHARACTER_SHAPES = ['circle', 'square', 'triangle', 'rhombus', 'star', 'pentagon', 'plus', 'x', 'octagon'];
 function randomShape() {
   // Use equal-size buckets with rejection sampling so every character has
   // exactly the same probability, rather than relying on a potentially
@@ -1869,11 +1991,30 @@ function randomShape() {
   return CHARACTER_SHAPES[Math.floor(Math.random() * n)];
 }
 
+function randomTodoYujiMode() {
+  return Math.random() < 0.5 ? 'todo' : 'yuji';
+}
+
 function resolveRandomShapes() {
   if (p1.useRandomShape) p1.shape = randomShape();
   if (p2.useRandomShape) p2.shape = randomShape();
+  // Todo/Yuji is also randomized whenever an octagon character spawns.
+  if (p1.shape === 'octagon') p1.todoYujiMode = randomTodoYujiMode();
+  if (p2.shape === 'octagon') p2.todoYujiMode = randomTodoYujiMode();
   updateLegend();
 }
+
+// Todo/Yuji preview animation for both the character chooser and character viewer.
+// These are only visual previews; they never change the player's actual selection.
+let todoYujiPreviewIsYuji = false;
+function updateTodoYujiPreviews() {
+  todoYujiPreviewIsYuji = !todoYujiPreviewIsYuji;
+  document.querySelectorAll('.shape-swatch.shape-octagon.todo-swatch, .char-info-header .shape-swatch.shape-octagon').forEach(el => {
+    el.textContent = todoYujiPreviewIsYuji ? 'Y' : 'T';
+    el.classList.toggle('yuji-swatch', todoYujiPreviewIsYuji);
+  });
+}
+setInterval(updateTodoYujiPreviews, 2000);
 
 // ---------------------------------------------------------------
 // Pause handling
@@ -1928,6 +2069,7 @@ const MAX_HEALTH_BY_SHAPE = {
   star: 150,     // Megumi
   plus: 150,     // Yuta
   x: 150,        // Nobara
+  octagon: 150,   // Todo / Yuji
 };
 const SHOT_DAMAGE = 25;
 const SHOT_COOLDOWN = 500; // ms between shots
@@ -2016,12 +2158,25 @@ const PULL_MAX_RANGE = W / 2; // half the width of the screen
 const PULL_LINGER_MS = 750; // how long the orb sits at max range before vanishing
 const PULL_TRIGGER_RADIUS = 160; // how close the enemy must get to be pulled in
 const PULL_STRENGTH = 2; // px per frame the enemy is dragged toward the orb
-const SPECIAL_SHAPES = ['circle', 'rhombus', 'square', 'triangle', 'star', 'pentagon', 'plus', 'x'];
+const SPECIAL_SHAPES = ['circle', 'rhombus', 'square', 'triangle', 'star', 'pentagon', 'plus', 'x', 'octagon'];
 const HAIRPIN_DAMAGE = 5;
 const HAIRPIN_WALL_DAMAGE = 2;
-const HAIRPIN_RADIUS = 44;
-const HAIRPIN_BLAST_RADIUS = 26;
+const HAIRPIN_RADIUS = 66; // 1.5x the previous 44px enemy-hit radius
+const HAIRPIN_BLAST_RADIUS = 39; // 1.5x the previous 26px blast radius
 const HAIRPIN_BLAST_DURATION = 220;
+const TODO_YUJI_SUPER_START_COOLDOWN = 5000; // ms after round start before Todo/Yuji can use their Super
+const TODO_YUJI_SWITCH_COOLDOWN = 5000; // ms between Switch uses
+const TODO_YUJI_SWITCH_BLAST_RADIUS = 60;
+const TODO_YUJI_SWITCH_BLAST_DAMAGE = 5;
+const TODO_YUJI_SWITCH_WALL_DAMAGE = 1;
+const YUJI_BLACK_FLASH_COOLDOWN = 4000;
+const YUJI_BLACK_FLASH_RANGE = W / 2;
+const YUJI_BLACK_FLASH_SPEED = 8;
+const YUJI_BLACK_FLASH_DAMAGE = 20;
+const YUJI_BLACK_FLASH_ATTACK_DAMAGE = 15;
+const YUJI_ATTACK_DAMAGE = 10;
+const YUJI_BLACK_FLASH_WALL_BLAST_RADIUS = 60;
+const YUJI_BLACK_FLASH_EFFECT_DURATION = 300;
 const NOBARA_STRAW_DOLL_DAMAGE = 35;
 const NOBARA_STRAW_DOLL_STUN = 2000;
 const NOBARA_STRAW_DOLL_COOLDOWN = 9000; // ms after use
@@ -2316,6 +2471,22 @@ const MEGUMI_STRIKE_BUSH_DAMAGE = 3;
 const MEGUMI_STRIKE_RANGE = 30; // slightly more reach for Megumi's close-range strike
 const CLEAVE_RANGE = 22; // Cleave is a shorter-range close-quarters strike
 const MEGUMI_STRIKE_COOLDOWN = 500; // ms, same cadence as a normal shot
+const TODO_ATTACK_DAMAGE = 10;
+const TODO_ATTACK_RANGE = 58;
+const TODO_ATTACK_COOLDOWN = 500;
+const TODO_TAKADA_DAMAGE = 5;
+const TODO_TAKADA_RANGE = TODO_ATTACK_RANGE * 2;
+const TODO_TAKADA_SPEED = 7;
+const TODO_DIRECT_COMBO_WINDOW = 1000;
+const TODO_DIRECT_COMBO_REQUIRED = 3;
+const TODO_RECT_DURATION = 130;
+const TODO_BOOGIE_SPEED = 7;
+const TODO_BOOGIE_COOLDOWN = 650;
+const TODO_BOOGIE_PROJECTILE_SIZE = 9;
+const TODO_BOOGIE_WALL_GAP = 3;
+let todoTakadas = [];
+let todoAttackEffects = [];
+let todoBoogieProjectiles = [];
 
 // Nobara's Super: Resonance. It only works while Nobara is standing on her Enemy Piece.
 function attemptStrawDoll(shooter) {
@@ -2767,6 +2938,8 @@ function handleSuperKeyDown(shooter, target) {
     attemptYutaLoveBeam(shooter);
   } else if (shooter.shape === 'x') {
     attemptStrawDoll(shooter);
+  } else if (shooter.shape === 'octagon') {
+    attemptTodoYujiSwitch(shooter);
   }
 }
 
@@ -3234,7 +3407,24 @@ function drawSlashEffects(ctx, now) {
     ctx.save();
     ctx.translate(fx.x, fx.y);
 
-    if (fx.type === 'strawDoll') {
+    if (fx.type === 'yujiBlackTrail') {
+      const radius = (fx.radius || 10) * (0.7 + 0.3 * alpha);
+      // Draw the colored glow first, then an opaque black core so the trail
+      // itself is always fully black rather than being tinted by the glow.
+      ctx.globalAlpha = alpha * 0.8;
+      ctx.fillStyle = fx.color;
+      ctx.shadowColor = fx.color;
+      ctx.shadowBlur = 18;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 1.18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (fx.type === 'strawDoll') {
       const radius = fx.radius || 30;
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = fx.color; ctx.shadowColor = fx.color; ctx.shadowBlur = 10; ctx.lineWidth = 4;
@@ -3333,9 +3523,17 @@ class Player {
     this.size = size; // used as bounding radius/half-width for all shapes
     this.color = color;
     this.glow = glow;
-    this.shape = shape; // 'circle' | 'square' | 'triangle' | 'rhombus' | 'star' | 'pentagon'
+    this.shape = shape; // playable shape id
+    this.todoYujiMode = shape === 'octagon' ? randomTodoYujiMode() : 'todo';
     this.keyMap = keyMap; // {up, down, left, right}
     this.speed = 3.2;
+    this.yujiSpeedStacks = 0;
+    this.yujiSpeedBoostUntil = 0;
+    this.yujiBlackFlashUntil = 0;
+    this.yujiBlackFlashActive = false;
+    this.yujiBlackFlashDistance = 0;
+    this.yujiBlackFlashDir = { x: 1, y: 0 };
+    this.yujiBlackFlashHitEntities = new Set();
     this.maxHealth = MAX_HEALTH_BY_SHAPE[shape] ?? MAX_HEALTH;
     this.health = this.maxHealth;
     this.lastCombatActionTime = performance.now();
@@ -3343,6 +3541,8 @@ class Player {
     this.lastShotTime = -Infinity;
     this.specialLastUsed = -Infinity;
     this.enemyPiece = null; // Nobara's marker for the last enemy hit
+    this.todoDirectHitCount = 0;
+    this.todoLastDirectHitTime = 0;
     // Yuta Copy state is initialized here so every Yuta starts from a clean,
     // predictable state even before resetRound() runs.
     this.yutaCopyAvailable = false;
@@ -3456,6 +3656,10 @@ class Player {
   // then holds flat at max for the rest of the buff — unless interrupted
   // (standing still too long ends the whole buff early, see update()).
   getSpeedMultiplier() {
+    if (this.shape === 'octagon' && this.todoYujiMode === 'yuji') {
+      if (performance.now() >= this.yujiSpeedBoostUntil) return 1;
+      return 1 + this.yujiSpeedStacks * 0.05;
+    }
     if (this.shape !== 'triangle' || !this.speedBoostActive) return 1;
     const elapsed = Math.max(0, performance.now() - this.speedBoostStartTime);
     if (elapsed < NAOYA_SUPER_RAMP_TIME) {
@@ -3521,8 +3725,21 @@ class Player {
     return performance.now() < this.frozenUntil;
   }
 
+  updateYujiSpeedBoost() {
+    if (this.shape !== 'octagon') return;
+    if (performance.now() >= this.yujiSpeedBoostUntil) {
+      this.yujiSpeedStacks = 0;
+      this.yujiSpeedBoostUntil = 0;
+    }
+  }
+
   update(other) {
     this.updatePassiveHealing();
+    this.updateYujiSpeedBoost();
+    if (this.yujiBlackFlashActive) {
+      updateYujiBlackFlash.call(this, other);
+      return;
+    }
     if (this.speedBoostActive) {
       const now = performance.now();
       if (now >= this.speedBoostActivatedAt + NAOYA_SUPER_DURATION) {
@@ -3954,6 +4171,14 @@ class Player {
     if (this.shape === 'x') {
       return performance.now() - this.specialLastUsed >= SPECIAL_COOLDOWN;
     }
+    if (this.shape === 'octagon') {
+      // Todo uses Boogie Woogie; Yuji uses Black Flash. Both share the same
+      // secondary-slot ready ring and their own cooldown timing.
+      if (this.todoYujiMode === 'yuji') {
+        return !this.yujiBlackFlashActive && performance.now() - this.specialLastUsed >= YUJI_BLACK_FLASH_COOLDOWN;
+      }
+      return performance.now() - this.specialLastUsed >= TODO_BOOGIE_COOLDOWN;
+    }
     if (this.shape === 'plus') {
       // Yuta follows the same cooldown pattern as every other secondary
       // ability: specialLastUsed is the single cooldown timestamp. Granted
@@ -3997,6 +4222,11 @@ class Player {
     }
     if (this.shape === 'plus') {
       return now - this.superLastUsed >= YUTA_LOVE_BEAM_COOLDOWN;
+    }
+    if (this.shape === 'octagon') {
+      // Todo/Yuji have a shorter Super lock at round start and a shorter recharge.
+      return now - roundStartTime >= TODO_YUJI_SUPER_START_COOLDOWN &&
+        now - this.superLastUsed >= TODO_YUJI_SWITCH_COOLDOWN;
     }
     return false;
   }
@@ -4098,6 +4328,18 @@ class Player {
         ctx.fill();
         break;
       }
+      case 'octagon': {
+        // Match the flat-top octagon used by the home screen and character UI.
+        const O = R * 1.08;
+        const pts = [[-0.40,-1],[0.40,-1],[1,-0.40],[1,0.40],[0.40,1],[-0.40,1],[-1,0.40],[-1,-0.40]];
+        ctx.beginPath();
+        pts.forEach(([px, py], i) => {
+          const x = this.x + px * O, y = this.y + py * O;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.closePath(); ctx.fill();
+        break;
+      }
       case 'pentagon': {
         ctx.beginPath();
         for (let i = 0; i < 5; i++) {
@@ -4127,6 +4369,16 @@ class Player {
     }
 
     ctx.restore();
+
+    if (this.shape === 'octagon') {
+      ctx.save();
+      ctx.fillStyle = '#0d1117';
+      ctx.font = `800 ${Math.max(12, this.size * 1.05)}px Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(this.todoYujiMode === 'yuji' ? 'Y' : 'T', this.x, this.y + 1);
+      ctx.restore();
+    }
 
     // White square around anyone currently frozen by Freezeframe
     if (this.isFrozen()) {
@@ -5643,6 +5895,8 @@ function handleShootKeyDown(shooter, target) {
     attemptYutaAttack(shooter, target);
   } else if (shooter.shape === 'x') {
     attemptNailShot(shooter, target);
+  } else if (shooter.shape === 'octagon') {
+    attemptTodoAttack(shooter, target);
   }
 }
 
@@ -5703,6 +5957,371 @@ function attemptHairpin(shooter) {
     }
   }
   nailSymbols.length = 0;
+}
+
+function sendTodoBoogieSwap(shooter, data) {
+  if (!onlineMode || !onlineMatchStarted || shooter !== onlineLocalPlayer()) return;
+  onlineSend({ type:'game', data:{ kind:'todo-boogie-swap', playerNumber:getSide(shooter), ...data } });
+}
+
+function placeTodoSafelyOutsideWall(shooter, wall, hitX, hitY) {
+  const closestX = Math.max(wall.x, Math.min(hitX, wall.x + wall.w));
+  const closestY = Math.max(wall.y, Math.min(hitY, wall.y + wall.h));
+  let nx = hitX - closestX, ny = hitY - closestY;
+  const len = Math.hypot(nx, ny);
+  if (len < 0.001) {
+    nx = hitX - (wall.x + wall.w / 2); ny = hitY - (wall.y + wall.h / 2);
+    const n = Math.hypot(nx, ny) || 1; nx /= n; ny /= n;
+  } else { nx /= len; ny /= len; }
+  let x = closestX + nx * (shooter.size + TODO_BOOGIE_WALL_GAP);
+  let y = closestY + ny * (shooter.size + TODO_BOOGIE_WALL_GAP);
+  x = Math.max(shooter.size, Math.min(W - shooter.size, x));
+  y = Math.max(shooter.size, Math.min(H - shooter.size, y));
+  for (let i = 0; i < 12 && getWallBlockingMove(shooter, x, y) === wall; i++) {
+    x += nx * 2; y += ny * 2;
+    x = Math.max(shooter.size, Math.min(W - shooter.size, x));
+    y = Math.max(shooter.size, Math.min(H - shooter.size, y));
+  }
+  return {x, y};
+}
+
+class TodoBoogieProjectile {
+  constructor(x, y, vx, vy, owner) { this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.owner=owner; this.dead=false; }
+  update() {
+    if (this.dead) return;
+    const oldX=this.owner.x, oldY=this.owner.y;
+    const nextX=this.x+this.vx, nextY=this.y+this.vy;
+    for (let wi=0; wi<obstacles.length; wi++) {
+      const wall=obstacles[wi];
+      if (!isWallActive(wall) || isBush(wall)) continue;
+      if (!segmentCircleRectCollision(this.x,this.y,nextX,nextY,TODO_BOOGIE_PROJECTILE_SIZE,wall)) continue;
+      const hitX=Math.max(wall.x,Math.min(nextX,wall.x+wall.w));
+      const hitY=Math.max(wall.y,Math.min(nextY,wall.y+wall.h));
+      const safe=placeTodoSafelyOutsideWall(this.owner,wall,hitX,hitY);
+      wall.x=oldX; wall.y=oldY;
+      this.owner.x=safe.x; this.owner.y=safe.y; this.dead=true;
+      slashEffects.push({type:'todoBoogie',x:this.owner.x,y:this.owner.y,color:this.owner.color,radius:24,duration:220,start:performance.now()});
+      sendTodoBoogieSwap(this.owner,{kind:'wall',wallIndex:wi,wallX:oldX,wallY:oldY,todoX:this.owner.x,todoY:this.owner.y});
+      return;
+    }
+    for (const entity of getAllEntities()) {
+      if (!entity || entity===this.owner || getSide(entity)===getSide(this.owner) || entity.health<=0) continue;
+      const radius=(entity.size||entity.radius||0)+TODO_BOOGIE_PROJECTILE_SIZE;
+      if (Math.hypot(nextX-entity.x,nextY-entity.y)<=radius) {
+        const targetX=entity.x,targetY=entity.y;
+        this.owner.x=targetX; this.owner.y=targetY; entity.x=oldX; entity.y=oldY; this.dead=true;
+        slashEffects.push({type:'todoBoogie',x:this.owner.x,y:this.owner.y,color:this.owner.color,radius:24,duration:220,start:performance.now()});
+        const data={kind:entity.isPet?'pet':'player',todoX:this.owner.x,todoY:this.owner.y,targetX:entity.x,targetY:entity.y};
+        if(entity.isPet) data.petId=entity.onlinePetId||null;
+        sendTodoBoogieSwap(this.owner,data); return;
+      }
+    }
+    const candidates=[];
+    for(const q of projectiles) if(q&&!q.dead&&q.owner&&getSide(q.owner)!==getSide(this.owner)) candidates.push(q);
+    for(const q of nailProjectiles) if(q&&!q.dead&&q.owner&&getSide(q.owner)!==getSide(this.owner)) candidates.push(q);
+    for(const q of furnaceShots) if(q&&!q.dead&&q.owner&&getSide(q.owner)!==getSide(this.owner)) candidates.push(q);
+    for(const q of pullOrbs) if(q&&!q.dead&&q.owner&&getSide(q.owner)!==getSide(this.owner)) candidates.push(q);
+    for(const q of todoTakadas) if(q&&q.owner&&getSide(q.owner)!==getSide(this.owner)) candidates.push(q);
+    for(const q of candidates) {
+      const qr=q.radius||q.hitRadius||TODO_BOOGIE_PROJECTILE_SIZE;
+      if(Math.hypot(nextX-q.x,nextY-q.y)<=TODO_BOOGIE_PROJECTILE_SIZE+qr) {
+        const hitX=q.x,hitY=q.y; q.x=oldX;q.y=oldY;this.owner.x=hitX;this.owner.y=hitY;this.dead=true;
+        slashEffects.push({type:'todoBoogie',x:this.owner.x,y:this.owner.y,color:this.owner.color,radius:24,duration:220,start:performance.now()});
+        sendTodoBoogieSwap(this.owner,{kind:'projectile',todoX:this.owner.x,todoY:this.owner.y,projectileX:q.x,projectileY:q.y}); return;
+      }
+    }
+    this.x=nextX;this.y=nextY;
+    if(this.x<-20||this.x>W+20||this.y<-20||this.y>H+20)this.dead=true;
+  }
+  draw(){ctx.save();ctx.fillStyle=this.owner.color;ctx.shadowColor=this.owner.color;ctx.shadowBlur=12;ctx.globalAlpha=.9;ctx.beginPath();ctx.arc(this.x,this.y,TODO_BOOGIE_PROJECTILE_SIZE,0,Math.PI*2);ctx.fill();ctx.restore();}
+}
+
+function attemptBoogieWoogie(shooter,target) {
+  const now=performance.now();
+  if(shooter.shape!=='octagon'||shooter.todoYujiMode!=='todo') return;
+  if(now-shooter.specialLastUsed<TODO_BOOGIE_COOLDOWN) return;
+  const enemy=getNearestEnemy(shooter)||target; if(!enemy)return;
+  const dx=enemy.x-shooter.x,dy=enemy.y-shooter.y,dist=Math.hypot(dx,dy)||1;
+  shooter.specialLastUsed=now; shooter.markCombatAction();
+  todoBoogieProjectiles.push(new TodoBoogieProjectile(shooter.x,shooter.y,dx/dist*TODO_BOOGIE_SPEED,dy/dist*TODO_BOOGIE_SPEED,shooter));
+}
+
+function spawnTodoRectEffect(shooter, target) {
+  const now = performance.now();
+  const boosted = shooter.todoYujiMode === 'yuji' && now < shooter.yujiBlackFlashUntil;
+  todoAttackEffects.push(boosted ? {
+    type: 'yujiBlackHit', x: target.x, y: target.y,
+    color: shooter.color, start: now, duration: 180, radius: Math.max(10, (target.size || shooter.size) * 0.9)
+  } : {
+    type: 'todoRect', x: shooter.x, y: shooter.y,
+    targetX: target.x, targetY: target.y,
+    color: shooter.color, start: now, duration: TODO_RECT_DURATION
+  });
+}
+
+function applyYujiHitSpeedBoost(shooter) {
+  if (shooter.shape !== 'octagon' || shooter.todoYujiMode !== 'yuji') return;
+  shooter.yujiSpeedStacks += 1;
+  shooter.yujiSpeedBoostUntil = performance.now() + 500;
+}
+
+function attemptTodoAttack(shooter, target) {
+  if (shooter.shape !== 'octagon' || (shooter.todoYujiMode !== 'todo' && shooter.todoYujiMode !== 'yuji')) return;
+  const now = performance.now();
+  if (now - shooter.lastShotTime < TODO_ATTACK_COOLDOWN) return;
+  if (!target || target.health <= 0) return;
+  shooter.lastShotTime = now;
+  shooter.markCombatAction();
+
+  const dx = target.x - shooter.x;
+  const dy = target.y - shooter.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const hitRange = TODO_ATTACK_RANGE + shooter.size + (target.size || 0);
+  spawnTodoRectEffect(shooter, target);
+
+  if (dist <= hitRange && !segmentHitsActiveWall(shooter.x, shooter.y, target.x, target.y)) {
+    // Yuji keeps the same short-range punch animation/range as Todo, but none
+    // of Todo's combo, swap, or missed-projectile mechanics. His normal punch
+    // simply deals 20 damage (or 15 during the Black Flash follow-up buff).
+    if (shooter.todoYujiMode === 'yuji') {
+      const attackDamage = performance.now() < shooter.yujiBlackFlashUntil
+        ? YUJI_BLACK_FLASH_ATTACK_DAMAGE : YUJI_ATTACK_DAMAGE;
+      damageEnemy(shooter, target, attackDamage, 'yujiPunch');
+      return;
+    }
+
+    // Todo's original direct-hit combo remains unchanged.
+    if (shooter.todoDirectHitCount > 0 && now - shooter.todoLastDirectHitTime > TODO_DIRECT_COMBO_WINDOW) {
+      shooter.todoDirectHitCount = 0;
+    }
+    shooter.todoDirectHitCount += 1;
+    shooter.todoLastDirectHitTime = now;
+
+    if (shooter.todoDirectHitCount >= TODO_DIRECT_COMBO_REQUIRED && target instanceof Player) {
+      const oldX = shooter.x, oldY = shooter.y;
+      shooter.x = target.x; shooter.y = target.y;
+      target.x = oldX; target.y = oldY;
+      shooter.todoDirectHitCount = 0;
+      shooter.todoLastDirectHitTime = 0;
+      slashEffects.push({ type:'todoSwitch', x:shooter.x, y:shooter.y, color:shooter.color, radius:26, duration:220, start:now });
+      if (onlineMode && onlineMatchStarted && shooter === onlineLocalPlayer()) {
+        onlineSend({ type:'game', data:{ kind:'todo-switch', playerNumber:getSide(shooter), shooterX:shooter.x, shooterY:shooter.y, targetX:target.x, targetY:target.y } });
+      }
+    } else {
+      damageEnemy(shooter, target, TODO_ATTACK_DAMAGE, 'todoTakada');
+    }
+    return;
+  }
+
+  // A missed Todo punch sends Takada. Yuji does not send this projectile.
+  if (shooter.todoYujiMode === 'yuji') return;
+  const dirX = dx / dist, dirY = dy / dist;
+  todoTakadas.push({ x: shooter.x, y: shooter.y, vx: dirX * TODO_TAKADA_SPEED, vy: dirY * TODO_TAKADA_SPEED, owner: shooter, target, size: shooter.size, damage: TODO_TAKADA_DAMAGE, maxDistance: TODO_TAKADA_RANGE, traveled: 0, color: shooter.color });
+}
+
+function attemptYujiBlackFlash(shooter, target) {
+  const now = performance.now();
+  if (shooter.shape !== 'octagon' || shooter.todoYujiMode !== 'yuji') return false;
+  if (shooter.yujiBlackFlashActive) return false;
+  if (now - shooter.specialLastUsed < YUJI_BLACK_FLASH_COOLDOWN) return false;
+
+  // Black Flash always uses the game's normal enemy auto-aim.
+  // Player movement direction is never used when an enemy is available.
+  let dirX = 1, dirY = 0;
+  const enemy = getNearestEnemy(shooter) || target;
+  if (enemy) {
+    const dx = enemy.x - shooter.x, dy = enemy.y - shooter.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    dirX = dx / dist; dirY = dy / dist;
+  }
+
+  shooter.specialLastUsed = now;
+  shooter.markCombatAction();
+  shooter.yujiBlackFlashActive = true;
+  shooter.yujiBlackFlashDistance = YUJI_BLACK_FLASH_RANGE;
+  shooter.yujiBlackFlashDir = { x: dirX, y: dirY };
+  shooter.yujiBlackFlashHitEntities = new Set();
+  shooter.dashing = false;
+  shooter.charging = false;
+  shooter.holdStartTime = null;
+  if (onlineMode && onlineMatchStarted && shooter === onlineLocalPlayer()) {
+    onlineSend({ type:'game', data:{ kind:'yuji-black-flash', playerNumber:getSide(shooter), x:shooter.x, y:shooter.y, angle:Math.atan2(dirY,dirX), until:0 } });
+  }
+  return true;
+}
+
+function updateYujiBlackFlash(other) {
+  if (!this.yujiBlackFlashActive) return;
+  const stepSize = 1;
+  const steps = Math.max(1, Math.round(YUJI_BLACK_FLASH_SPEED / stepSize));
+  let stopped = false;
+
+  for (let i = 0; i < steps && this.yujiBlackFlashDistance > 0; i++) {
+    const testX = this.x + this.yujiBlackFlashDir.x * stepSize;
+    const testY = this.y + this.yujiBlackFlashDir.y * stepSize;
+    const dashBounds = this.getBounds(testX, testY);
+    const blocking = obstacles.find(o => isWallActive(o) && this.rectsOverlap(dashBounds, o));
+
+    if (blocking && isBush(blocking)) {
+      // Black Flash tears straight through bushes and instantly destroys them.
+      damageWall(blocking, blocking.health);
+      this.x = testX; this.y = testY;
+      this.yujiBlackFlashDistance -= stepSize;
+      continue;
+    }
+
+    if (blocking) {
+      // The dash stops at the wall, but the impact instantly destroys every
+      // breakable wall close to Yuji. Silver/unbreakable walls stay intact.
+      for (const wall of obstacles) {
+        if (!isWallActive(wall) || isUnbreakableWall(wall)) continue;
+        if (circleRectOverlap(this.x, this.y, YUJI_BLACK_FLASH_WALL_BLAST_RADIUS, wall)) {
+          damageWall(wall, wall.health);
+        }
+      }
+      stopped = true;
+      break;
+    }
+
+    if (this.canMoveTo(testX, testY, other, true)) {
+      this.x = testX; this.y = testY;
+      this.yujiBlackFlashDistance -= stepSize;
+      slashEffects.push({ type:'yujiBlackTrail', x:this.x, y:this.y, color:this.color, radius:this.size * 0.72, duration:170, start:performance.now() });
+    } else {
+      stopped = true;
+      break;
+    }
+
+    // An enemy is hit only once per dash, and the first hit stops Black Flash.
+    for (const enemy of getAllEntities()) {
+      if (!enemy || enemy === this || enemy.health <= 0 || getSide(enemy) === getSide(this)) continue;
+      if (this.yujiBlackFlashHitEntities.has(enemy)) continue;
+      const enemySize = enemy.size || enemy.radius || 13;
+      if (Math.hypot(this.x - enemy.x, this.y - enemy.y) <= this.size + enemySize) {
+        this.yujiBlackFlashHitEntities.add(enemy);
+        damageEnemy(this, enemy, YUJI_BLACK_FLASH_DAMAGE, 'blackFlash');
+        this.yujiBlackFlashUntil = performance.now() + 3000;
+        if (onlineMode && onlineMatchStarted && this === onlineLocalPlayer()) {
+          onlineSend({ type:'game', data:{ kind:'yuji-black-flash-hit', playerNumber:getSide(this), x:enemy.x, y:enemy.y, until:3000 } });
+        }
+        // Black Flash stops immediately when it connects with an enemy.
+        stopped = true;
+        break;
+      }
+    }
+  }
+
+  if (stopped || this.yujiBlackFlashDistance <= 0) {
+    this.yujiBlackFlashActive = false;
+    this.yujiBlackFlashDistance = 0;
+  }
+}
+
+function applyTodoYujiSwitchBlast(shooter, x = shooter.x, y = shooter.y) {
+  const radius = TODO_YUJI_SWITCH_BLAST_RADIUS;
+  const now = performance.now();
+  slashEffects.push({ type:'todoSwitch', x, y, color:shooter.color, radius, duration:220, start:now });
+
+  for (const entity of getAllEntities()) {
+    if (!entity || entity === shooter || getSide(entity) === getSide(shooter) || entity.health <= 0) continue;
+    if (Math.hypot(entity.x - x, entity.y - y) <= radius + (entity.size || 0)) {
+      damageEnemy(shooter, entity, TODO_YUJI_SWITCH_BLAST_DAMAGE, 'todoYujiSwitch');
+    }
+  }
+
+  for (const wall of obstacles) {
+    if (!isWallActive(wall) || isUnbreakableWall(wall)) continue;
+    if (circleRectOverlap(x, y, radius, wall)) {
+      damageWall(wall, TODO_YUJI_SWITCH_WALL_DAMAGE);
+    }
+  }
+}
+
+function attemptTodoYujiSwitch(shooter) {
+  const now = performance.now();
+  if (shooter.shape !== 'octagon') return;
+  if (now - roundStartTime < TODO_YUJI_SUPER_START_COOLDOWN) return;
+  if (now - shooter.superLastUsed < TODO_YUJI_SWITCH_COOLDOWN) return;
+  shooter.superLastUsed = now;
+  shooter.markCombatAction();
+  shooter.todoYujiMode = shooter.todoYujiMode === 'todo' ? 'yuji' : 'todo';
+  shooter.todoDirectHitCount = 0;
+  shooter.todoLastDirectHitTime = 0;
+  applyTodoYujiSwitchBlast(shooter);
+  updateLegend();
+  if (onlineMode && onlineMatchStarted && shooter === onlineLocalPlayer()) {
+    onlineSend({ type:'game', data:{ kind:'todo-yuji-switch', playerNumber:getSide(shooter), mode:shooter.todoYujiMode, x:shooter.x, y:shooter.y } });
+  }
+}
+
+function updateTodoTakadas() {
+  for (let i = todoTakadas.length - 1; i >= 0; i--) {
+    const t = todoTakadas[i];
+    const step = Math.hypot(t.vx, t.vy);
+    t.x += t.vx; t.y += t.vy; t.traveled += step;
+    let remove = t.traveled >= t.maxDistance;
+    if (!remove && (t.x < -t.size || t.x > W + t.size || t.y < -t.size || t.y > H + t.size)) remove = true;
+    if (!remove && segmentHitsActiveWall(t.x - t.vx, t.y - t.vy, t.x, t.y)) remove = true;
+    if (!remove && t.target && t.target.health > 0 && getSide(t.target) !== getSide(t.owner) && Math.hypot(t.x - t.target.x, t.y - t.target.y) <= t.size + t.target.size) {
+      const takadaDamage = t.owner.todoYujiMode === 'yuji' && performance.now() < t.owner.yujiBlackFlashUntil
+        ? YUJI_BLACK_FLASH_ATTACK_DAMAGE : t.damage;
+      damageEnemy(t.owner, t.target, takadaDamage, 'takada');
+      remove = true;
+    }
+    if (remove) todoTakadas.splice(i, 1);
+  }
+}
+
+function drawTodoTakadas() {
+  for (const t of todoTakadas) {
+    ctx.save();
+    ctx.globalAlpha = 0.42;
+    ctx.fillStyle = t.color;
+    ctx.shadowColor = t.color; ctx.shadowBlur = 10;
+    ctx.beginPath();
+    for (let k = 0; k < 8; k++) {
+      const angle = (-90 + k * 45) * Math.PI / 180;
+      const px = t.x + t.size * 1.08 * Math.cos(angle);
+      const py = t.y + t.size * 1.08 * Math.sin(angle);
+      if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#0d1117';
+    ctx.font = `800 ${Math.max(10, t.size * 0.9)}px Arial, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('T', t.x, t.y + 1);
+    ctx.restore();
+  }
+  const now = performance.now();
+  for (let i = todoAttackEffects.length - 1; i >= 0; i--) {
+    const e = todoAttackEffects[i];
+    const age = now - e.start;
+    if (age >= e.duration) { todoAttackEffects.splice(i,1); continue; }
+    const t = age / e.duration;
+    if (e.type === 'yujiBlackHit') {
+      ctx.save();
+      ctx.globalAlpha = 1 - t;
+      ctx.fillStyle = '#000000';
+      ctx.shadowColor = e.color;
+      ctx.shadowBlur = 18;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, (e.radius || 12) * (0.9 + 0.1 * (1 - t)), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.85 * (1 - t);
+    ctx.fillStyle = e.color;
+    const dx = e.targetX - e.x, dy = e.targetY - e.y;
+    const len = Math.min(TODO_ATTACK_RANGE + 20, Math.hypot(dx,dy));
+    const angle = Math.atan2(dy,dx);
+    ctx.translate(e.x, e.y); ctx.rotate(angle);
+    ctx.fillRect(0, -5, len * t, 10);
+    ctx.restore();
+  }
 }
 
 // Megumi's attack: a short-range strike for 20 damage.
@@ -5891,6 +6510,9 @@ function handleSpecialKeyDown(shooter, target) {
     attemptYutaCopy(shooter);
   } else if (shooter.shape === 'x') {
     attemptHairpin(shooter);
+  } else if (shooter.shape === 'octagon') {
+    if (shooter.todoYujiMode === 'todo') attemptBoogieWoogie(shooter, target);
+    else attemptYujiBlackFlash(shooter, target);
   }
 }
 
@@ -7068,6 +7690,9 @@ function resetRound() {
   mapHasBeenInitialized = true;
   applyMap(currentMapIndex);
   activePets.length = 0;
+  todoTakadas.length = 0;
+  todoAttackEffects.length = 0;
+  todoBoogieProjectiles.length = 0;
   onlinePetSerial = { 1: 0, 2: 0 };
   if (onlineMode && onlineMatchStarted) onlineResetRoundHealthSync();
   // State sequence numbers stay monotonic across rounds so a delayed packet
@@ -7147,6 +7772,13 @@ function resetRound() {
     p.yutaSlashBlockedUntil = 0;
     p.yutaCopyCharges = 0;
     p.specialLastUsed = -Infinity;
+    p.yujiSpeedStacks = 0;
+    p.yujiSpeedBoostUntil = 0;
+    p.yujiBlackFlashUntil = 0;
+    p.yujiBlackFlashActive = false;
+    p.yujiBlackFlashDistance = 0;
+    p.yujiBlackFlashDir = { x: 1, y: 0 };
+    p.yujiBlackFlashHitEntities = new Set();
     p.yutaCopyCooldownEnd = 0;
     p.yutaCopiedShape = null;
     p.yutaCopySymbolShape = null;
@@ -7156,6 +7788,7 @@ function resetRound() {
     p.yutaCopyTargetShape = null;
     p.yutaCopyAvailable = true;
     p.yutaCopyRingVisible = true;
+    if (p.shape === 'octagon') p.todoYujiMode = randomTodoYujiMode();
   }
 
   resetMapWalls();
@@ -7369,7 +8002,12 @@ function loop() {
     if (p2.shutterAttack) drawHakariShutterDoors(p2.shutterAttack);
     drawHakariDanceWave(p1);
     drawHakariDanceWave(p2);
-    drawNobaraEnemyPieces();
+    for (const boogie of todoBoogieProjectiles) boogie.update();
+    todoBoogieProjectiles = todoBoogieProjectiles.filter(boogie => !boogie.dead);
+    updateTodoTakadas();
+  drawTodoTakadas();
+    for (const boogie of todoBoogieProjectiles) boogie.draw();
+  drawNobaraEnemyPieces();
     drawNailSymbols();
     drawSlashEffects(ctx, performance.now());
     for (const proj of projectiles) proj.draw();
