@@ -751,7 +751,10 @@ let onlineRoundResetPending = false;
 // become the online choice.
 let onlineSelectedShape = null;
 let onlineServerSelectedShape = null;
-const ONLINE_STATE_SEND_MS = 50;
+const ONLINE_STATE_SEND_MS = 33;
+// Shared logical round token used to reject delayed packets from a previous round.
+// WebSocket ordering alone is not enough when a round is reset while packets are queued.
+let onlineRoundSyncId = 0;
 
 // ---------------------------------------------------------------------------
 // ONLINE SYNC CORE
@@ -773,6 +776,7 @@ let onlineLastSerializedLocalHealth = null;
 let onlineLastSerializedPetHealth = new Map();
 
 function onlineResetSyncState() {
+  onlineRoundSyncId = 0;
   onlineLastStateSent = 0;
   onlineStateSeq = 0;
   onlineRemoteStateSeq = 0;
@@ -788,6 +792,7 @@ function onlineResetSyncState() {
 }
 
 function onlineResetRoundHealthSync() {
+  onlineRoundSyncId++;
   // State sequence numbers remain monotonic across rounds. Health revisions
   // and damage IDs are round-local, because HP is reset at round start.
   onlineRemotePlayerHealthRevision = 0;
@@ -898,7 +903,7 @@ function onlineSendStateSnapshot(force = false) {
   }
 
   onlineSend({ type:'game', data:{
-    kind:'state', stateSeq:++onlineStateSeq, mapIndex:currentMapIndex,
+    kind:'state', stateSeq:++onlineStateSeq, roundSyncId:onlineRoundSyncId, mapIndex:currentMapIndex,
     x:localState.x, y:localState.y,
     health:localState.health, healthRevision:onlineLocalHealthRevision,
     maxHealth:localState.maxHealth, lastDir:localState.lastDir,
