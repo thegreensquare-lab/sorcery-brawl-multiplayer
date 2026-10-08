@@ -1783,6 +1783,8 @@ const YUTA_SLASH_DURATION = 180;
 const YUTA_ATTACK_COOLDOWN = 120;
 const YUTA_COMBO_WINDOW = 300;
 const YUTA_DASH_DAMAGE = 11;
+const YUTA_SLASH_BUSH_DAMAGE = 2;
+const YUTA_DASH_BUSH_DAMAGE = 3;
 const YUTA_DASH_DURATION = 100;
 const YUTA_POST_DASH_SLASH_COOLDOWN = 500; // ms after Yuta's dash before Slash can be used again
 const YUTA_LOVE_BEAM_DURATION = 2500;
@@ -1811,6 +1813,8 @@ const CIRCLE_MAX_RADIUS = 14;
 const DASH_SPEED = 11;
 const DASH_DURATION = 220; // ms
 const DASH_DAMAGE = 20;
+const DASH_BUSH_DAMAGE = 15;
+const DASH_WALL_DAMAGE = 5;
 const DASH_COOLDOWN = 350; // ms
 const DASH_STILL_THRESHOLD = 250; // ms of no movement before auto-aim kicks in
 const SQUARE_DAMAGE = 1;
@@ -1840,6 +1844,7 @@ const WIN_BANNER_DURATION = 3000; // ms
 const SPECIAL_COOLDOWN = 4000;
 const YUTA_COPY_SECOND_USE_COOLDOWN = 2000; // ms
 const PULL_DAMAGE = 5;
+const BLUE_BUSH_DAMAGE = 2;
 const PULL_ORB_SPEED = 5;
 const PULL_ORB_RADIUS = 16;
 const PULL_MAX_RANGE = W / 2; // half the width of the screen
@@ -1848,6 +1853,7 @@ const PULL_TRIGGER_RADIUS = 160; // how close the enemy must get to be pulled in
 const PULL_STRENGTH = 2; // px per frame the enemy is dragged toward the orb
 const SPECIAL_SHAPES = ['circle', 'rhombus', 'square', 'triangle', 'star', 'pentagon', 'plus', 'x'];
 const HAIRPIN_DAMAGE = 5;
+const HAIRPIN_WALL_DAMAGE = 2;
 const HAIRPIN_RADIUS = 44;
 const HAIRPIN_BLAST_RADIUS = 26;
 const HAIRPIN_BLAST_DURATION = 220;
@@ -1939,7 +1945,8 @@ const CHOSO_WAVE_DURATION = 2500; // ms the wave (and Choso's self-lock) lasts, 
 const CHOSO_WAVE_GROWTH_TIME = 600; // ms to grow from 0 to full range; holds there after
 const CHOSO_WAVE_RANGE = W / 2; // max forward length
 const CHOSO_WAVE_WIDTH = 132; // 1.5x its original width (was 2x Purple's old radius of 22)
-const CHOSO_WAVE_DAMAGE = 30; // dealt once, the moment it first touches the enemy
+const CHOSO_WAVE_DAMAGE = 30;
+const CHOSO_WAVE_BUSH_DAMAGE = 1; // dealt once, the moment it first touches the enemy
 const CHOSO_WAVE_COOLDOWN = SUPER_AFTER_COOLDOWN; // ms, starts once the wave ends
 const CHOSO_WAVE_PUSH_SPEED = 4; // px/frame the enemy is shoved along the wave's direction
 const CHOSO_WAVE_LOCK_REFRESH = 150; // ms an enemy's movement lock persists past their last frame of contact
@@ -2134,6 +2141,7 @@ const FURNACE_SPLASH_RADIUS = 80; // blast radius for one-shotting walls / catch
 
 // Megumi's attack: a short-range strike for 20 damage.
 const MEGUMI_STRIKE_DAMAGE = 20;
+const MEGUMI_STRIKE_BUSH_DAMAGE = 3;
 const MEGUMI_STRIKE_RANGE = 30; // slightly more reach for Megumi's close-range strike
 const CLEAVE_RANGE = 22; // Cleave is a shorter-range close-quarters strike
 const MEGUMI_STRIKE_COOLDOWN = 500; // ms, same cadence as a normal shot
@@ -2714,6 +2722,7 @@ function attemptWave(shooter, target) {
   shooter.waveEndTime = now + CHOSO_WAVE_DURATION;
   shooter.waveHitTarget = false;
   shooter.waveHitPet = false;
+  shooter.waveHitBushes = new Set();
 
   // Cancel anything shooter was mid-action on so the lock starts clean.
   shooter.charging = false;
@@ -3200,6 +3209,7 @@ class Player {
     this.waveEndTime = 0; // when the current wave (and Choso's self-lock) ends
     this.waveHitTarget = false; // whether this wave has already connected with the enemy
     this.waveHitPet = false; // whether this wave has already connected with the enemy's pet
+    this.waveHitBushes = new Set(); // bush tiles already damaged by this Wave
     this.waveLockedUntil = 0; // can't move on own while this is in the future — refreshed each frame of contact
     this.wavePinned = false; // true while pushed against a wall/edge and unable to go further
     this.wavePinNextTick = 0; // next wall/edge pin damage-tick timestamp
@@ -3486,6 +3496,22 @@ class Player {
     // wave and locked while touching it, just like players.
     const originX = this.waveOriginX;
     const originY = this.waveOriginY;
+
+    // Wave passes through walls, but each bush it reaches takes 1 damage once.
+    if (!this.waveHitBushes) this.waveHitBushes = new Set();
+    for (const bush of obstacles) {
+      if (!isWallActive(bush) || !isBush(bush) || this.waveHitBushes.has(bush)) continue;
+      const cx = bush.x + bush.w / 2, cy = bush.y + bush.h / 2;
+      const bdx = cx - originX, bdy = cy - originY;
+      const bforward = bdx * this.waveDir.x + bdy * this.waveDir.y;
+      const blateral = -bdx * this.waveDir.y + bdy * this.waveDir.x;
+      const reach = Math.max(bush.w, bush.h) * 0.5 + CHOSO_WAVE_WIDTH / 2;
+      if (bforward >= -reach && bforward <= this.waveLength + reach && Math.abs(blateral) <= reach) {
+        this.waveHitBushes.add(bush);
+        damageWall(bush, CHOSO_WAVE_BUSH_DAMAGE);
+      }
+    }
+
     for (const pet of getAllPets()) {
       if (!pet || pet.health <= 0 || getSide(pet) === getSide(this)) continue;
       const pdx = pet.x - originX, pdy = pet.y - originY;
@@ -3628,11 +3654,23 @@ class Player {
       } else {
         const dashBounds = this.getBounds(testX, testY);
         const blocking = obstacles.find(o => isWallActive(o) && this.rectsOverlap(dashBounds, o));
-        if (blocking && abilityPassesThroughWall(blocking)) {
-          this.x = testX; this.y = testY;
-          if (isBush(blocking)) damageWall(blocking, 5);
+        if (blocking && isBush(blocking)) {
+          if (this.shape === 'triangle') {
+            // Naoya cannot dash through bushes; entering one deals 15 damage
+            // to the bush and ends the dash.
+            damageWall(blocking, DASH_BUSH_DAMAGE);
+          } else if (this.shape === 'plus') {
+            // Yuta also cannot dash through bushes; his dash chips them for 3.
+            damageWall(blocking, YUTA_DASH_BUSH_DAMAGE);
+          }
+          hitWall = true;
+          break;
         } else {
           hitWall = true;
+          if (blocking && this.shape === 'triangle' && isUnbreakableWall(blocking) === false) {
+            // Naoya's dash hitting a normal brick wall deals 5 damage to it.
+            damageWall(blocking, DASH_WALL_DAMAGE);
+          }
           break;
         }
       }
@@ -4500,6 +4538,9 @@ class MahoragaPet {
     this.knockback = null;
     this.burnStartTime = 0; this.burnEndTime = 0; this.burnNextTickTime = Infinity;
     this.burnDuration = FURNACE_BURN_DURATION_CENTER; this.burnSource = null;
+    this.bushTouchStart = 0;
+    this.bushWalkUnlocked = false;
+    this.bushesBrokenThisStep = new Set();
   }
   isFrozen() { return performance.now() < this.frozenUntil; }
 
@@ -4509,7 +4550,9 @@ class MahoragaPet {
     if (x - this.size < 4 || x + this.size > W - 4) return false;
     if (y - this.size < 4 || y + this.size > H - 4) return false;
     for (const o of obstacles) {
-      if (isWallActive(o) && circleRectOverlap(x, y, this.size, o)) return false;
+      if (!isWallActive(o)) continue;
+      if (isBush(o) && this.bushWalkUnlocked) continue;
+      if (circleRectOverlap(x, y, this.size, o)) return false;
     }
     return true;
   }
@@ -4542,6 +4585,24 @@ class MahoragaPet {
     this.y = Math.max(this.size, Math.min(H - this.size, this.y));
 
     const now = performance.now();
+    const touchingBush = obstacles.some(o => isWallActive(o) && isBush(o) && circleRectOverlap(this.x, this.y, this.size, o));
+    if (!this.bushWalkUnlocked) {
+      if (touchingBush) {
+        if (!this.bushTouchStart) this.bushTouchStart = now;
+        if (now - this.bushTouchStart >= 8000) {
+          this.bushWalkUnlocked = true;
+        }
+      } else {
+        this.bushTouchStart = 0;
+      }
+    }
+    if (this.bushWalkUnlocked) {
+      for (const bush of obstacles) {
+        if (isWallActive(bush) && isBush(bush) && circleRectOverlap(this.x, this.y, this.size, bush)) {
+          damageWall(bush, bush.health);
+        }
+      }
+    }
     const targetSize = this.target.size || this.target.radius || 13;
     if (dist <= MAHORAGA_CONTACT_RANGE + targetSize && now - this.lastContactTime >= MAHORAGA_CONTACT_COOLDOWN) {
       this.lastContactTime = now;
@@ -5113,12 +5174,14 @@ class PullOrb {
       }
     }
 
-    // Pick up any wall tile it touches — dragged along, but never damaged.
+    // Blue passes through unbreakable walls, but pulls bushes and chips each
+    // bush for 2 damage the first time the orb captures it. Other breakable
+    // walls are still pulled without taking damage.
     for (const o of obstacles) {
-      if (!isWallActive(o)) continue;
-      if (abilityPassesThroughWall(o)) continue;
+      if (!isWallActive(o) || isUnbreakableWall(o)) continue;
       if (this.wallCells.some(e => e.ref === o)) continue;
       if (circleRectOverlap(this.x, this.y, PULL_ORB_RADIUS, o)) {
+        if (isBush(o)) damageWall(o, BLUE_BUSH_DAMAGE);
         this.capture('wall', o);
       }
     }
@@ -5453,6 +5516,14 @@ function attemptHairpin(shooter) {
         damageEnemy(shooter, entity, HAIRPIN_DAMAGE, 'hairpin');
       }
     }
+    // Each Hairpin explosion also damages every breakable wall/bush inside
+    // its blast radius for 2 damage. Unbreakable walls are unaffected.
+    for (const wall of obstacles) {
+      if (!isWallActive(wall) || isUnbreakableWall(wall)) continue;
+      if (circleRectOverlap(nail.x, nail.y, HAIRPIN_BLAST_RADIUS, wall)) {
+        damageWall(wall, HAIRPIN_WALL_DAMAGE);
+      }
+    }
   }
   nailSymbols.length = 0;
 }
@@ -5478,10 +5549,23 @@ function attemptMegumiStrike(shooter, target) {
     }});
   }
 
-  const dist = Math.hypot(target.x - shooter.x, target.y - shooter.y);
-  if (dist > MEGUMI_STRIKE_RANGE + shooter.size + target.size) return; // out of range
-
-  damageEnemy(shooter, target, MEGUMI_STRIKE_DAMAGE, 'megumiStrike');
+  const attackRadius = MEGUMI_STRIKE_RANGE + shooter.size;
+  let hitSomeone = false;
+  for (const entity of getAllEntities()) {
+    if (!entity || entity === shooter || getSide(entity) === getSide(shooter) || entity.health <= 0) continue;
+    const entitySize = entity.size || entity.radius || 13;
+    if (Math.hypot(entity.x - shooter.x, entity.y - shooter.y) <= attackRadius + entitySize) {
+      damageEnemy(shooter, entity, MEGUMI_STRIKE_DAMAGE, 'megumiStrike');
+      hitSomeone = true;
+    }
+  }
+  for (const bush of obstacles) {
+    if (!isWallActive(bush) || !isBush(bush)) continue;
+    if (circleRectOverlap(shooter.x, shooter.y, attackRadius, bush)) {
+      damageWall(bush, MEGUMI_STRIKE_BUSH_DAMAGE);
+    }
+  }
+  return hitSomeone;
 }
 
 // Yuta's main attack is a timing combo.
@@ -5515,6 +5599,13 @@ function attemptYutaSlash(shooter, target, direction, secondEffect = false) {
     damageEnemy(shooter, target, YUTA_SLASH_DAMAGE, 'yutaSlash');
     if (shooter.yutaNaoyaKnockback && target.health > 0) {
       applyKnockback(shooter, target);
+    }
+  }
+  // Yuta's slash chips bushes for 2 damage.
+  for (const bush of obstacles) {
+    if (!isWallActive(bush) || !isBush(bush)) continue;
+    if (circleRectOverlap(shooter.x, shooter.y, YUTA_SLASH_RANGE + shooter.size, bush)) {
+      damageWall(bush, YUTA_SLASH_BUSH_DAMAGE);
     }
   }
   return true;
@@ -6866,6 +6957,7 @@ function resetRound() {
     p.waveEndTime = 0;
     p.waveHitTarget = false;
     p.waveHitPet = false;
+    p.waveHitBushes = new Set();
     p.waveLockedUntil = 0;
     p.wavePinned = false;
     p.wavePinNextTick = 0;
