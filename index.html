@@ -405,30 +405,50 @@
     .mobile-action { width: 60px; height: 60px; font-size: 21px; }
   }
 
-  /* Landscape mobile: keep controls beside the arena instead of underneath it. */
+  /* Landscape mobile: fit the entire 800x500 arena inside the viewport. */
   @media (orientation: landscape) and (max-height: 700px) {
-    .mobile-multiplayer-active #mobileControls {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
+    .mobile-multiplayer-active {
       width: 100vw;
       height: 100vh;
-      padding: 12px 18px max(12px, env(safe-area-inset-bottom));
-      align-items: flex-end;
+      min-height: 0;
+      overflow: hidden;
+      justify-content: center;
+      padding: 0;
+    }
+    .mobile-multiplayer-active .canvas-wrap {
+      width: min(100vw, calc(100vh * 1.6));
+      height: min(100vh, calc(100vw / 1.6));
+      max-width: 100vw;
+      max-height: 100vh;
+      margin: 0 auto;
+    }
+    .mobile-multiplayer-active canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .mobile-multiplayer-active #mobileControls {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+      align-items: center;
       justify-content: space-between;
       pointer-events: none;
       z-index: 50;
+      box-sizing: border-box;
     }
     .mobile-multiplayer-active #mobileControls #mobileJoystick,
     .mobile-multiplayer-active #mobileControls #mobileActionButtons {
       pointer-events: auto;
     }
-    .mobile-multiplayer-active #mobileJoystick {
-      margin-bottom: 0;
-    }
+    .mobile-multiplayer-active #mobileJoystick,
     .mobile-multiplayer-active #mobileActionButtons {
-      margin-bottom: 0;
+      flex-shrink: 0;
     }
   }
 
@@ -473,7 +493,7 @@
   </div>
   <div class="home-buttons">
     <button id="playGameBtn">Play Game</button>
-    <button id="onlineGameBtn">Online Multiplayer</button>
+    <button id="onlineGameBtn">Computer Multiplayer</button>
     <button id="mobileOnlineGameBtn">Mobile Multiplayer</button>
     <button id="viewCharsBtn">View Characters</button>
   </div>
@@ -551,9 +571,9 @@
         <div class="shape-swatch shape-x"></div>
         <h3>Nobara</h3>
       </div>
-      <div class="char-info-ability"><span class="ability-label">Attack</span> — <span class="ability-name">TBD</span></div>
-      <div class="char-info-ability"><span class="ability-label">Ability</span> — <span class="ability-name">TBD</span></div>
-      <div class="char-info-ability"><span class="ability-label">Super</span> — <span class="ability-name">TBD</span></div>
+      <div class="char-info-ability"><span class="ability-label">Attack</span> — <span class="ability-name">Nail Shot</span>: Fires nails toward the enemy that damage anything they hit and leave an X marker where they stop.</div>
+      <div class="char-info-ability"><span class="ability-label">Ability</span> — <span class="ability-name">Hairpin</span>: Detonates every X marker on the ground at once, damaging enemies caught near the blasts.</div>
+      <div class="char-info-ability"><span class="ability-label">Super</span> — <span class="ability-name">Resonance</span>: Uses an Enemy Piece to strike its linked enemy, dealing heavy damage and stunning them.</div>
     </div>
   </div>
   <button id="charInfoBackBtn">Back</button>
@@ -649,6 +669,8 @@
     <span class="p1" id="p1Score">Player 1 wins: 0</span>
     <span class="p2" id="p2Score">Player 2 wins: 0</span>
   </div>
+
+  <div id="mapName" style="font-size:12px;color:var(--text-dim);margin-top:-6px;">Map: Crossroads</div>
 
   <div class="canvas-wrap">
     <canvas id="game" width="800" height="500" tabindex="0"></canvas>
@@ -876,7 +898,7 @@ function onlineSendStateSnapshot(force = false) {
   }
 
   onlineSend({ type:'game', data:{
-    kind:'state', stateSeq:++onlineStateSeq,
+    kind:'state', stateSeq:++onlineStateSeq, mapIndex:currentMapIndex,
     x:localState.x, y:localState.y,
     health:localState.health, healthRevision:onlineLocalHealthRevision,
     maxHealth:localState.maxHealth, lastDir:localState.lastDir,
@@ -893,6 +915,7 @@ function onlineSendStateSnapshot(force = false) {
     yutaCopyCooldownIn:Math.max(0, SPECIAL_COOLDOWN - (now - localState.specialLastUsed)),
     superCooldownIn:Math.max(0, (localState.superLastUsed || -Infinity) + YUTA_LOVE_BEAM_COOLDOWN - now),
     stunnedIn:Math.max(0, (localState.stunnedUntil || 0) - now),
+    enemyPiece: localState.enemyPiece ? { x: localState.enemyPiece.x, y: localState.enemyPiece.y } : null,
     frozenIn:Math.max(0, (localState.frozenUntil || 0) - now),
     burnIn:Math.max(0, (localState.burnEndTime || 0) - now),
     scaleIn:Math.max(0, (localState.scaleUntil || 0) - now),
@@ -1131,6 +1154,8 @@ function connectOnline(isMobile = false) {
   onlineSelectedShape = null;
   onlineServerSelectedShape = null;
   onlinePlayerNumber = 0;
+  currentMapIndex = 0;
+  mapHasBeenInitialized = false;
   setOnlineReadyStatus('Connecting...');
   // Do not allow an insecure WebSocket from the HTTPS GitHub Pages build.
   if (location.protocol === 'https:' && !ONLINE_WS_URL.startsWith('wss://')) {
@@ -1259,6 +1284,11 @@ function connectOnline(isMobile = false) {
     }
     if (msg.type === 'game' && msg.data && msg.data.kind === 'state') {
       const d = msg.data;
+      if (Number.isInteger(d.mapIndex) && d.mapIndex !== currentMapIndex) {
+        currentMapIndex = d.mapIndex;
+        mapHasBeenInitialized = true;
+        applyMap(currentMapIndex);
+      }
       const remote = onlineRemotePlayer();
       if (!remote) return;
       // WebSocket delivery is ordered, but ignore an accidental stale snapshot
@@ -1299,6 +1329,11 @@ function connectOnline(isMobile = false) {
       }
       const remoteNow = performance.now();
       if (Number.isFinite(d.stunnedIn)) remote.stunnedUntil = remoteNow + Math.max(0, d.stunnedIn);
+      if (d.enemyPiece && Number.isFinite(d.enemyPiece.x) && Number.isFinite(d.enemyPiece.y)) {
+        remote.enemyPiece = { x:d.enemyPiece.x, y:d.enemyPiece.y, target:onlineLocalPlayer() };
+      } else {
+        remote.enemyPiece = null;
+      }
       if (Number.isFinite(d.frozenIn)) remote.frozenUntil = remoteNow + Math.max(0, d.frozenIn);
       if (Number.isFinite(d.burnIn)) {
         const burn = Math.max(0, d.burnIn);
@@ -1481,6 +1516,7 @@ function showHome() {
   p1.score = 0;
   p2.score = 0;
   updateScoreboard();
+  mapHasBeenInitialized = false;
   resetRound();
 }
 
@@ -1533,6 +1569,7 @@ startGameBtn.addEventListener('click', () => {
     return;
   }
   resolveRandomShapes();
+  mapHasBeenInitialized = false;
   resetRound(); // starts the Super unlock timers from the actual match start
   showGame();
 });
@@ -1553,6 +1590,7 @@ const ABILITY_NAMES = {
   star: { main: 'Strike', secondary: 'Shikigami', super: 'Mahoraga' },
   plus: { main: 'Slash', secondary: 'Copy', super: 'Love Beam' },
   pentagon: { main: 'Shutter Doors', secondary: 'Dance', super: 'Idle Death Gamble' },
+  x: { main: 'Nail Shot', secondary: 'Hairpin', super: 'Resonance' },
 };
 
 function updateLegend() {
@@ -1776,6 +1814,17 @@ const SQUARE_PROJECTILE_SPEED = 9; // faster than a normal shot
 const SQUARE_PROJECTILE_RADIUS = 5; // hit radius — small bump to match the wider visual below
 const SQUARE_PROJECTILE_VISUAL_LENGTH = 18; // Piercing Blood is drawn as a wide streak, not a dot
 const SQUARE_PROJECTILE_VISUAL_WIDTH = 9;
+const NAIL_SHOT_DAMAGE = 9;
+const NAIL_SHOT_WALL_DAMAGE = 2;
+const NAIL_SHOT_RANGE = W / 3;
+const NAIL_SHOT_SPEED = 8;
+const NAIL_SHOT_COOLDOWN = 550;
+const NAIL_SHOT_SPREAD_DEG = 10;
+const YUTA_NOBARA_NAIL_RANGE = W / 2;
+const YUTA_NOBARA_NAIL_SPREAD_DEG = 4;
+const NAIL_SHOT_HALF_WIDTH = 7;
+const NAIL_SHOT_LENGTH = 28;
+const NAIL_SYMBOL_SIZE = 7;
 const SQUARE_OVERHEAT_THRESHOLD = 3000; // ms of continuous holding before overheating
 const SQUARE_OVERHEAT_COOLDOWN = 2500; // ms cooldown once overheated
 const WIN_BANNER_DURATION = 3000; // ms
@@ -1792,7 +1841,15 @@ const PULL_MAX_RANGE = W / 2; // half the width of the screen
 const PULL_LINGER_MS = 750; // how long the orb sits at max range before vanishing
 const PULL_TRIGGER_RADIUS = 160; // how close the enemy must get to be pulled in
 const PULL_STRENGTH = 2; // px per frame the enemy is dragged toward the orb
-const SPECIAL_SHAPES = ['circle', 'rhombus', 'square', 'triangle', 'star', 'pentagon', 'plus'];
+const SPECIAL_SHAPES = ['circle', 'rhombus', 'square', 'triangle', 'star', 'pentagon', 'plus', 'x'];
+const HAIRPIN_DAMAGE = 5;
+const HAIRPIN_RADIUS = 44;
+const HAIRPIN_BLAST_RADIUS = 26;
+const HAIRPIN_BLAST_DURATION = 220;
+const NOBARA_STRAW_DOLL_DAMAGE = 35;
+const NOBARA_STRAW_DOLL_STUN = 2000;
+const NOBARA_STRAW_DOLL_COOLDOWN = 9000; // ms after use
+const NOBARA_ENEMY_PIECE_RADIUS = 20;
 const HAKARI_SHUTTER_DELAY = 250;
 const HAKARI_SHUTTER_COOLDOWN = 700;
 const HAKARI_SHUTTER_LINGER = 40;
@@ -1899,6 +1956,155 @@ const NAOYA_SUPER_COOLDOWN = NAOYA_SUPER_AFTER_COOLDOWN; // ms, starts once the 
 const NAOYA_SUPER_BASE_DAMAGE = 5; // scaled by his current speed multiplier on contact
 const NAOYA_SUPER_HIT_COOLDOWN = 450; // ms between contact-damage ticks
 
+// Nobara's Nail Shot. Each nail travels in a straight line for a short fixed
+// range. It stops at an enemy or wall; if it reaches its maximum range, it
+// drops Nobara's X marker at the endpoint.
+class NailProjectile {
+  constructor(x, y, angle, owner, dropGroundSymbol = true, maxRange = NAIL_SHOT_RANGE) {
+    this.x = x;
+    this.y = y;
+    this.startX = x;
+    this.startY = y;
+    this.vx = Math.cos(angle) * NAIL_SHOT_SPEED;
+    this.vy = Math.sin(angle) * NAIL_SHOT_SPEED;
+    this.angle = angle;
+    this.owner = owner;
+    this.dropGroundSymbol = dropGroundSymbol;
+    this.maxRange = maxRange;
+    // Nail Shot must use the exact same player color as Nobara.
+    this.color = owner.color;
+    this.damage = NAIL_SHOT_DAMAGE;
+    this.dead = false;
+  }
+
+  dropSymbol() {
+    if (!this.dropGroundSymbol) {
+      this.dead = true;
+      return;
+    }
+    nailSymbols.push({
+      x: this.x,
+      y: this.y,
+      owner: this.owner,
+      color: this.owner.color,
+      createdAt: performance.now()
+    });
+    this.dead = true;
+  }
+
+  update() {
+    if (this.dead) return;
+
+    const nextX = this.x + this.vx;
+    const nextY = this.y + this.vy;
+
+    // Walls stop the nail and take exactly 2 damage.
+    for (const o of obstacles) {
+      if (!isWallActive(o)) continue;
+      if (segmentCircleRectCollision(this.x, this.y, nextX, nextY, 1, o)) {
+        // Keep the marker at the point the nail reached when it struck the wall.
+        this.x = nextX;
+        this.y = nextY;
+        damageWall(o, NAIL_SHOT_WALL_DAMAGE);
+        this.dropSymbol();
+        return;
+      }
+    }
+
+    this.x = nextX;
+    this.y = nextY;
+
+    // A nail disappears after hitting the first opposing entity.
+    for (const entity of getAllEntities()) {
+      if (!entity || entity === this.owner || getSide(entity) === getSide(this.owner) ||
+          entity.health <= 0) continue;
+      const dist = Math.hypot(this.x - entity.x, this.y - entity.y);
+      if (dist < (entity.size || entity.radius || 0) + 2) {
+        damageEnemy(this.owner, entity, this.damage, 'nailShot');
+        this.dead = true;
+        return;
+      }
+    }
+
+    const traveled = Math.hypot(this.x - this.startX, this.y - this.startY);
+    if (traveled >= this.maxRange) {
+      const remaining = this.maxRange / Math.max(traveled, 1);
+      // Place the marker exactly at the maximum range instead of slightly
+      // beyond it because of the frame step.
+      this.x = this.startX + (this.x - this.startX) * remaining;
+      this.y = this.startY + (this.y - this.startY) * remaining;
+      this.dropSymbol();
+      return;
+    }
+
+    if (this.x < 0 || this.x > W || this.y < 0 || this.y > H) {
+      this.x = Math.max(0, Math.min(W, this.x));
+      this.y = Math.max(0, Math.min(H, this.y));
+      this.dropSymbol();
+    }
+  }
+
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = this.color;
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur = 8;
+    // Thin isosceles triangle with its vertex pointing toward the enemy.
+    ctx.beginPath();
+    ctx.moveTo(NAIL_SHOT_LENGTH / 2, 0);
+    ctx.lineTo(-NAIL_SHOT_LENGTH / 2, -NAIL_SHOT_HALF_WIDTH);
+    ctx.lineTo(-NAIL_SHOT_LENGTH / 2, NAIL_SHOT_HALF_WIDTH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+let nailProjectiles = [];
+let nailSymbols = [];
+
+function drawNobaraEnemyPieces() {
+  for (const player of [p1, p2]) {
+    if (!player || player.shape !== 'x' || !player.enemyPiece) continue;
+    const piece = player.enemyPiece;
+    ctx.save(); ctx.translate(piece.x, piece.y);
+    ctx.globalAlpha = 0.72; ctx.fillStyle = player.color; ctx.shadowColor = player.color; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1; ctx.shadowColor = 'transparent'; ctx.fillStyle = '#000';
+    const d=10, n=5;
+    ctx.beginPath(); ctx.moveTo(-d,-d); ctx.lineTo(0,-n); ctx.lineTo(d,-d); ctx.lineTo(n,0); ctx.lineTo(d,d); ctx.lineTo(0,n); ctx.lineTo(-d,d); ctx.lineTo(-n,0); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawNailSymbols() {
+  for (const symbol of nailSymbols) {
+    ctx.save();
+    // Ground marker uses the same filled X geometry as Nobara's body and
+    // character chooser, just scaled down so it reads as a trap marker.
+    ctx.translate(symbol.x, symbol.y);
+    const d = NAIL_SYMBOL_SIZE;
+    const n = d * 0.30;
+    ctx.fillStyle = symbol.color;
+    ctx.shadowColor = symbol.color;
+    ctx.shadowBlur = 5;
+    ctx.beginPath();
+    ctx.moveTo(-d, -d);
+    ctx.lineTo(0, -n);
+    ctx.lineTo(d, -d);
+    ctx.lineTo(n, 0);
+    ctx.lineTo(d, d);
+    ctx.lineTo(0, n);
+    ctx.lineTo(-d, d);
+    ctx.lineTo(-n, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 // Sukuna's Super: Furnace. A slow, heavy projectile that explodes on the
 // first thing it touches (enemy or wall) — instantly destroying every wall
 // tile within its blast radius, and if the enemy is caught in that same
@@ -1927,6 +2133,24 @@ const MEGUMI_STRIKE_RANGE = 30; // slightly more reach for Megumi's close-range 
 const CLEAVE_RANGE = 22; // Cleave is a shorter-range close-quarters strike
 const MEGUMI_STRIKE_COOLDOWN = 500; // ms, same cadence as a normal shot
 
+// Nobara's Super: Resonance. It only works while Nobara is standing on her Enemy Piece.
+function attemptStrawDoll(shooter) {
+  const now = performance.now();
+  if (shooter.shape !== 'x') return;
+  if (now - roundStartTime < SUPER_START_COOLDOWN) return;
+  if (now - shooter.superLastUsed < NOBARA_STRAW_DOLL_COOLDOWN) return;
+  const piece = shooter.enemyPiece;
+  const target = piece && piece.target;
+  if (!piece || !target || target.health <= 0) return;
+  if (Math.hypot(shooter.x - piece.x, shooter.y - piece.y) > NOBARA_ENEMY_PIECE_RADIUS) return;
+  shooter.superLastUsed = now;
+  shooter.markCombatAction();
+  target.stunnedUntil = Math.max(target.stunnedUntil || 0, now + NOBARA_STRAW_DOLL_STUN);
+  target.charging = false; target.dashing = false; target.holdStartTime = null;
+  slashEffects.push({ type:'strawDoll', x:target.x, y:target.y, color:shooter.color, radius:30, duration:280, start:now });
+  damageEnemy(shooter, target, NOBARA_STRAW_DOLL_DAMAGE, 'strawDoll');
+}
+
 // Megumi's Super: Mahoraga. Summons a pet — an eight-spoked wheel — with its
 // own 250 health that chases the enemy down and hits for 20 at point-blank
 // range. Casting it costs Megumi almost everything: he's left at 1 health.
@@ -1948,48 +2172,155 @@ const MAHORAGA_ADAPTATION_STEP = 0.05; // 5% less damage per prior hit from that
 const MAHORAGA_COOLDOWN = SUPER_AFTER_COOLDOWN; // ms, starts as soon as the pet is summoned
 const MEGUMI_SUPER_SELF_HEALTH = 1; // Megumi's own health right after casting it
 
-// Internal obstacle walls (rects), plus the arena border acts as walls too.
-// Walls are built out of connected square tiles on a 20px grid. Each tile
-// carries its own health out of 20 — not displayed or used for anything yet,
-// beyond being chipped away by Dismantle, Cleave, Red, and Freezeframe knockback.
+// ---------------------------------------------------------------------------
+// MAPS + WALL TYPES
+// ---------------------------------------------------------------------------
+// Every map uses 20px tiles. Bushes are soft cover: players/pets collide with
+// them, but abilities can pass through and damage them. Brick behaves like the
+// old normal wall. Silver walls are indestructible cover: they block movement
+// and pets, but abilities/projectiles pass straight through them.
 const TILE = 20;
 const WALL_MAX_HEALTH = 20;
+const BUSH_MAX_HEALTH = 25;
+const WALL_TYPES = Object.freeze({
+  BRICK: 'brick',
+  BUSH: 'bush',
+  UNBREAKABLE: 'unbreakable'
+});
 
-// Builds a block of tiles from grid coordinates (cols across, rows down).
-function wallBlock(col, row, cols, rows) {
+function makeWallTile(col, row, type = WALL_TYPES.BRICK) {
+  const x = col * TILE, y = row * TILE;
+  const maxHealth = type === WALL_TYPES.BUSH ? BUSH_MAX_HEALTH : WALL_MAX_HEALTH;
+  return {
+    x, y, w: TILE, h: TILE,
+    homeX: x, homeY: y,
+    type,
+    health: maxHealth,
+    maxHealth,
+  };
+}
+
+function wallBlock(col, row, cols, rows, type = WALL_TYPES.BRICK) {
   const tiles = [];
   for (let c = col; c < col + cols; c++) {
-    for (let r = row; r < row + rows; r++) {
-      const x = c * TILE, y = r * TILE;
-      tiles.push({
-        x, y, w: TILE, h: TILE,
-        homeX: x, homeY: y, // original spot, so a Pull Orb drag can be undone each round
-        health: WALL_MAX_HEALTH,
-        maxHealth: WALL_MAX_HEALTH,
-      });
-    }
+    for (let r = row; r < row + rows; r++) tiles.push(makeWallTile(c, r, type));
   }
   return tiles;
 }
 
-const obstacles = [
-  // Center column: two pillars with a gap, plus a short bar across the middle
-  ...wallBlock(19, 2, 2, 5),
-  ...wallBlock(19, 18, 2, 5),
-  ...wallBlock(17, 12, 6, 1),
-
-  // Upper-left and upper-right hooks
-  ...wallBlock(7, 6, 5, 1),
-  ...wallBlock(7, 6, 1, 4),
-  ...wallBlock(28, 6, 5, 1),
-  ...wallBlock(32, 6, 1, 4),
-
-  // Lower-left and lower-right hooks
-  ...wallBlock(7, 15, 1, 4),
-  ...wallBlock(7, 18, 5, 1),
-  ...wallBlock(32, 15, 1, 4),
-  ...wallBlock(28, 18, 5, 1),
+// Five deliberately different layouts. The open lanes keep ranged characters
+// useful, while the bushes reward positioning and the silver walls create
+// permanent safe angles. Pets still have to route around every wall.
+const MAPS = [
+  {
+    name: 'Crossroads',
+    ground: '#26384a',
+    tiles: [
+      ...wallBlock(19, 3, 2, 7, WALL_TYPES.BRICK),
+      ...wallBlock(19, 15, 2, 7, WALL_TYPES.BRICK),
+      ...wallBlock(16, 12, 8, 1, WALL_TYPES.BUSH),
+      ...wallBlock(6, 6, 5, 1, WALL_TYPES.BUSH),
+      ...wallBlock(29, 6, 5, 1, WALL_TYPES.BUSH),
+      ...wallBlock(6, 18, 5, 1, WALL_TYPES.BUSH),
+      ...wallBlock(29, 18, 5, 1, WALL_TYPES.BUSH),
+      ...wallBlock(14, 7, 2, 2, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(24, 16, 2, 2, WALL_TYPES.UNBREAKABLE),
+    ]
+  },
+  {
+    name: 'Twin Forts',
+    ground: '#4a4032',
+    tiles: [
+      ...wallBlock(7, 5, 10, 2, WALL_TYPES.BRICK),
+      ...wallBlock(23, 18, 10, 2, WALL_TYPES.BRICK),
+      ...wallBlock(7, 18, 10, 2, WALL_TYPES.BUSH),
+      ...wallBlock(23, 5, 10, 2, WALL_TYPES.BUSH),
+      ...wallBlock(12, 8, 2, 5, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(27, 12, 2, 5, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(18, 10, 4, 1, WALL_TYPES.BUSH),
+      ...wallBlock(18, 14, 4, 1, WALL_TYPES.BUSH),
+    ]
+  },
+  {
+    name: 'Silver Keep',
+    ground: '#344b5c',
+    tiles: [
+      ...wallBlock(15, 7, 10, 1, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(15, 17, 10, 1, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(15, 8, 1, 4, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(24, 8, 1, 4, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(15, 13, 1, 4, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(24, 13, 1, 4, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(8, 9, 5, 2, WALL_TYPES.BRICK),
+      ...wallBlock(27, 14, 5, 2, WALL_TYPES.BRICK),
+      ...wallBlock(5, 17, 5, 1, WALL_TYPES.BUSH),
+      ...wallBlock(30, 7, 5, 1, WALL_TYPES.BUSH),
+      ...wallBlock(11, 12, 4, 1, WALL_TYPES.BUSH),
+      ...wallBlock(25, 12, 4, 1, WALL_TYPES.BUSH),
+    ]
+  },
+  {
+    name: 'Zigzag Alley',
+    ground: '#40304d',
+    tiles: [
+      ...wallBlock(6, 5, 8, 1, WALL_TYPES.BRICK),
+      ...wallBlock(13, 6, 1, 5, WALL_TYPES.BRICK),
+      ...wallBlock(26, 19, 8, 1, WALL_TYPES.BRICK),
+      ...wallBlock(26, 14, 1, 5, WALL_TYPES.BRICK),
+      ...wallBlock(16, 10, 8, 1, WALL_TYPES.BUSH),
+      ...wallBlock(16, 14, 8, 1, WALL_TYPES.BUSH),
+      ...wallBlock(9, 14, 3, 3, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(29, 8, 3, 3, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(18, 6, 2, 2, WALL_TYPES.BUSH),
+      ...wallBlock(21, 17, 2, 2, WALL_TYPES.BUSH),
+    ]
+  },
+  {
+    name: 'Broken Ring',
+    ground: '#294337',
+    tiles: [
+      ...wallBlock(11, 5, 18, 1, WALL_TYPES.BRICK),
+      ...wallBlock(11, 19, 18, 1, WALL_TYPES.BRICK),
+      ...wallBlock(8, 8, 1, 9, WALL_TYPES.BRICK),
+      ...wallBlock(31, 8, 1, 9, WALL_TYPES.BRICK),
+      ...wallBlock(12, 8, 4, 1, WALL_TYPES.BUSH),
+      ...wallBlock(24, 8, 4, 1, WALL_TYPES.BUSH),
+      ...wallBlock(12, 16, 4, 1, WALL_TYPES.BUSH),
+      ...wallBlock(24, 16, 4, 1, WALL_TYPES.BUSH),
+      ...wallBlock(18, 9, 2, 3, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(22, 13, 2, 3, WALL_TYPES.UNBREAKABLE),
+      ...wallBlock(19, 12, 3, 1, WALL_TYPES.BUSH),
+    ]
+  }
 ];
+
+let currentMapIndex = 0;
+let mapHasBeenInitialized = false;
+let currentMapName = MAPS[0].name;
+let currentMapGroundColor = MAPS[0].ground;
+const obstacles = [];
+
+function applyMap(index) {
+  currentMapIndex = ((index % MAPS.length) + MAPS.length) % MAPS.length;
+  currentMapName = MAPS[currentMapIndex].name;
+  currentMapGroundColor = MAPS[currentMapIndex].ground;
+  obstacles.length = 0;
+  for (const tile of MAPS[currentMapIndex].tiles) {
+    obstacles.push({ ...tile });
+  }
+  const mapLabel = document.getElementById('mapName');
+  if (mapLabel) mapLabel.textContent = `Map: ${currentMapName}`;
+}
+
+function resetMapWalls() {
+  for (const o of obstacles) {
+    o.health = o.maxHealth;
+    o.x = o.homeX;
+    o.y = o.homeY;
+  }
+}
+
+applyMap(0);
 
 // Track which of our movement keys are currently held.
 const trackedKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
@@ -2250,6 +2581,8 @@ function handleSuperKeyDown(shooter, target) {
     attemptHakariPachinko(shooter);
   } else if (shooter.shape === 'plus') {
     attemptYutaLoveBeam(shooter);
+  } else if (shooter.shape === 'x') {
+    attemptStrawDoll(shooter);
   }
 }
 
@@ -2398,13 +2731,27 @@ const SUPER_READY_DARKEN_FACTOR = 0.5;
 // tile stops blocking anything (see isWallActive) but a black husk stays
 // drawn where it used to be.
 function damageWall(tile, amount) {
+  if (!tile || tile.type === WALL_TYPES.UNBREAKABLE) return;
   tile.health = Math.max(0, tile.health - amount);
 }
 
 // A wall tile only blocks movement/projectiles/etc. while it still has health.
 // Once it hits 0 it's purely cosmetic — players can walk and shoot through it.
 function isWallActive(tile) {
-  return tile.health > 0;
+  return !!tile && tile.health > 0;
+}
+
+function isBush(tile) {
+  return !!tile && tile.type === WALL_TYPES.BUSH;
+}
+
+function isUnbreakableWall(tile) {
+  return !!tile && tile.type === WALL_TYPES.UNBREAKABLE;
+}
+
+// Bushes let attacks pass through. Unbreakable walls stop attacks but cannot be damaged.
+function abilityPassesThroughWall(tile) {
+  return isBush(tile);
 }
 
 // Returns the first active wall that blocks an entity at the proposed position.
@@ -2588,6 +2935,12 @@ function damageEnemy(shooter, target, amount, attackType, fromNetwork = false) {
   if (onlineMode && onlineMatchStarted && !fromNetwork && sourcePlayer !== onlineLocalPlayer()) return;
   if (typeof target.takeDamage === 'function') target.takeDamage(amount, attackType);
   else target.health = Math.max(0, target.health - amount);
+
+  // Nobara's Enemy Piece tracks the last enemy PLAYER she actually damages.
+  if (sourcePlayer && sourcePlayer.shape === 'x' && target instanceof Player &&
+      target !== sourcePlayer && getSide(target) !== getSide(sourcePlayer) && target.health > 0) {
+    sourcePlayer.enemyPiece = { x: target.x, y: target.y, target };
+  }
   if (onlineMode && onlineMatchStarted && !fromNetwork && sourcePlayer === onlineLocalPlayer()) {
     onlineSendDamageEvent(target, amount, attackType);
   }
@@ -2696,7 +3049,19 @@ function drawSlashEffects(ctx, now) {
     ctx.save();
     ctx.translate(fx.x, fx.y);
 
-    if (fx.type === 'yutaCone') {
+    if (fx.type === 'strawDoll') {
+      const radius = fx.radius || 30;
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = fx.color; ctx.shadowColor = fx.color; ctx.shadowBlur = 10; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(0, 0, radius * (0.45 + t * 0.55), 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-10,-10); ctx.lineTo(10,10); ctx.moveTo(10,-10); ctx.lineTo(-10,10); ctx.stroke();
+    } else if (fx.type === 'hairpinBlast') {
+      const radius = fx.radius || HAIRPIN_BLAST_RADIUS;
+      ctx.globalAlpha = alpha; ctx.fillStyle = fx.color; ctx.strokeStyle = fx.color; ctx.shadowColor = fx.color; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.arc(0, 0, radius * (0.55 + t * 0.45), 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = alpha * 0.9; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0,0,radius*(0.55+t*0.45),0,Math.PI*2); ctx.stroke();
+    } else if (fx.type === 'yutaCone') {
       // Yuta's attack is a true swipe: it begins with no filled fan, then the
       // colored trail follows the moving edge all the way across the cone.
       // First combo = right -> left; second combo = left -> right.
@@ -2792,6 +3157,7 @@ class Player {
     this.damaged = false; // health bar only shows once damage has been taken
     this.lastShotTime = -Infinity;
     this.specialLastUsed = -Infinity;
+    this.enemyPiece = null; // Nobara's marker for the last enemy hit
     // Yuta Copy state is initialized here so every Yuta starts from a clean,
     // predictable state even before resetRound() runs.
     this.yutaCopyAvailable = false;
@@ -3255,8 +3621,15 @@ class Player {
       if (this.canMoveTo(testX, testY, other, true)) {
         this.x = testX; this.y = testY;
       } else {
-        hitWall = true;
-        break;
+        const dashBounds = this.getBounds(testX, testY);
+        const blocking = obstacles.find(o => isWallActive(o) && this.rectsOverlap(dashBounds, o));
+        if (blocking && abilityPassesThroughWall(blocking)) {
+          this.x = testX; this.y = testY;
+          if (isBush(blocking)) damageWall(blocking, 5);
+        } else {
+          hitWall = true;
+          break;
+        }
       }
     }
     if (hitWall) {
@@ -3364,6 +3737,9 @@ class Player {
     if (this.shape === 'pentagon') {
       return performance.now() - this.specialLastUsed >= HAKARI_DANCE_COOLDOWN && !this.danceActive;
     }
+    if (this.shape === 'x') {
+      return performance.now() - this.specialLastUsed >= SPECIAL_COOLDOWN;
+    }
     if (this.shape === 'plus') {
       // Yuta follows the same cooldown pattern as every other secondary
       // ability: specialLastUsed is the single cooldown timestamp. Granted
@@ -3401,6 +3777,9 @@ class Player {
     if (this.shape === 'pentagon') {
       return (!this.pachinkoPet || this.pachinkoPet.health <= 0) &&
         now - this.superLastUsed >= HAKARI_PACHINKO_COOLDOWN;
+    }
+    if (this.shape === 'x') {
+      return now - this.superLastUsed >= NOBARA_STRAW_DOLL_COOLDOWN;
     }
     if (this.shape === 'plus') {
       return now - this.superLastUsed >= YUTA_LOVE_BEAM_COOLDOWN;
@@ -3487,8 +3866,10 @@ class Player {
       case 'x': {
         // Nobara: clean Qwirkle-style four-point X. The four tips point
         // diagonally at 45 degrees, with deep notches on the four sides.
+        // Match the thicker X used in the character chooser exactly.
+        // The old in-game version used shallow notches, making Nobara look too thin.
         const outer = R * 1.08;
-        const notch = R * 0.28;
+        const notch = outer * 0.5;
         const pts = [
           [-outer, -outer], [0, -notch], [outer, -outer],
           [notch, 0], [outer, outer], [0, notch],
@@ -4223,6 +4604,36 @@ class MahoragaPet {
   }
 }
 
+function segmentIntersectsRect(x1, y1, x2, y2, rect, padding = 0) {
+  const left = rect.x - padding;
+  const right = rect.x + rect.w + padding;
+  const top = rect.y - padding;
+  const bottom = rect.y + rect.h + padding;
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  let t0 = 0;
+  let t1 = 1;
+
+  const clip = (p, q) => {
+    if (p === 0) return q >= 0;
+    const r = q / p;
+    if (p < 0) {
+      if (r > t1) return false;
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return false;
+      if (r < t1) t1 = r;
+    }
+    return true;
+  };
+
+  return clip(-dx, x1 - left) &&
+         clip(dx, right - x1) &&
+         clip(-dy, y1 - top) &&
+         clip(dy, bottom - y1);
+}
+
 class Projectile {
   constructor(x, y, vx, vy, color, owner, target, damage, hitRadius, isSlash, slashTilt, isPurple) {
     this.x = x; this.y = y;
@@ -4235,8 +4646,9 @@ class Projectile {
     this.isSlash = isSlash;
     this.slashTilt = slashTilt || 0; // radians, only used for the slash visual
     this.isPurple = isPurple || false; // Gojo's Super: shatters walls instead of stopping
-    this.delayUntil = this.isPurple ? performance.now() + 1000 : 0; // Purple fires 1s after activation
+    this.delayUntil = this.isPurple ? performance.now() + 350 : 0; // Purple fires after a short 0.35s wind-up
     this.hitEntities = new Set();
+    this.hitWalls = new Set();
     this.dead = false;
   }
 
@@ -4249,6 +4661,8 @@ class Projectile {
       this.applyHoming();
     }
 
+    const previousX = this.x;
+    const previousY = this.y;
     this.x += this.vx;
     this.y += this.vy;
 
@@ -4258,16 +4672,29 @@ class Projectile {
     }
 
     for (const o of obstacles) {
-      if (!isWallActive(o)) continue; // shattered tiles let projectiles pass
+      if (!isWallActive(o)) continue;
       if (this.x > o.x && this.x < o.x + o.w && this.y > o.y && this.y < o.y + o.h) {
-        if (this.isPurple) {
-          damageWall(o, o.health); // Purple shatters any tile it touches outright
-          continue; // pierces straight through, unlike every other projectile
+        // Hollow Purple phases through unbreakable silver walls. It cannot damage them.
+        // Every other projectile is stopped by an unbreakable wall.
+        if (isUnbreakableWall(o)) {
+          if (this.isPurple) continue;
+          this.dead = true;
+          return;
+        }
+        if (this.isPurple || abilityPassesThroughWall(o)) {
+          // Purple destroys normal/bush walls and passes through bushes.
+          if (this.isPurple && !this.hitWalls.has(o)) {
+            damageWall(o, o.health);
+            this.hitWalls.add(o);
+          } else if (!this.isPurple && isBush(o) && !this.hitWalls.has(o)) {
+            damageWall(o, this.isSlash ? DISMANTLE_WALL_DAMAGE : Math.max(1, this.damage));
+            this.hitWalls.add(o);
+          }
+          continue;
         }
         if (this.isSlash) {
-          damageWall(o, DISMANTLE_WALL_DAMAGE); // Sukuna's Dismantle
+          damageWall(o, DISMANTLE_WALL_DAMAGE);
         } else if (this.owner.shape === 'circle') {
-          // Gojo's Red: wall damage scales with how charged the shot was.
           const t = (this.damage - CIRCLE_MIN_DAMAGE) / (CIRCLE_MAX_DAMAGE - CIRCLE_MIN_DAMAGE);
           const wallDamage = roundDamage(1 + Math.max(0, Math.min(1, t)) * (7 - 1));
           damageWall(o, wallDamage);
@@ -4391,6 +4818,7 @@ class FurnaceShot {
       for (const o of obstacles) {
         if (!isWallActive(o)) continue;
         if (this.x > o.x && this.x < o.x + o.w && this.y > o.y && this.y < o.y + o.h) {
+          if (abilityPassesThroughWall(o)) continue;
           this.dead = true;
           return;
         }
@@ -4408,6 +4836,11 @@ class FurnaceShot {
     for (const o of obstacles) {
       if (!isWallActive(o)) continue;
       if (this.x > o.x && this.x < o.x + o.w && this.y > o.y && this.y < o.y + o.h) {
+        if (isUnbreakableWall(o)) continue;
+        if (isBush(o)) {
+          damageWall(o, o.health);
+          continue;
+        }
         this.explode();
         this.dead = true;
         return;
@@ -4677,7 +5110,8 @@ class PullOrb {
 
     // Pick up any wall tile it touches — dragged along, but never damaged.
     for (const o of obstacles) {
-      if (!isWallActive(o)) continue; // shattered tiles are gone, nothing to grab
+      if (!isWallActive(o)) continue;
+      if (abilityPassesThroughWall(o)) continue;
       if (this.wallCells.some(e => e.ref === o)) continue;
       if (circleRectOverlap(this.x, this.y, PULL_ORB_RADIUS, o)) {
         this.capture('wall', o);
@@ -4962,7 +5396,60 @@ function handleShootKeyDown(shooter, target) {
     attemptHakariShutterDoors(shooter, target);
   } else if (shooter.shape === 'plus') {
     attemptYutaAttack(shooter, target);
+  } else if (shooter.shape === 'x') {
+    attemptNailShot(shooter, target);
   }
+}
+
+// Nobara's main attack: three nails fired in a small spread.
+function attemptNailShot(shooter, target) {
+  const now = performance.now();
+  if (now - shooter.lastShotTime < NAIL_SHOT_COOLDOWN) return;
+  if (!target || target.health <= 0) return;
+  shooter.lastShotTime = now;
+  shooter.markCombatAction();
+  const dx = target.x - shooter.x;
+  const dy = target.y - shooter.y;
+  const baseAngle = Math.atan2(dy, dx);
+  const spread = NAIL_SHOT_SPREAD_DEG * Math.PI / 180;
+  for (const angleOffset of [-spread, 0, spread]) {
+    nailProjectiles.push(new NailProjectile(shooter.x, shooter.y, baseAngle + angleOffset, shooter));
+  }
+}
+
+// Yuta's copied Nail Shot: tighter spread, longer range, no ground markers.
+function attemptYutaCopiedNailShot(shooter, target) {
+  if (!target || target.health <= 0) return false;
+  shooter.markCombatAction();
+  const dx = target.x - shooter.x;
+  const dy = target.y - shooter.y;
+  const baseAngle = Math.atan2(dy, dx);
+  const spread = YUTA_NOBARA_NAIL_SPREAD_DEG * Math.PI / 180;
+  for (const angleOffset of [-spread, 0, spread]) {
+    nailProjectiles.push(new NailProjectile(shooter.x, shooter.y, baseAngle + angleOffset, shooter, false, YUTA_NOBARA_NAIL_RANGE));
+  }
+  return true;
+}
+
+// Nobara's Hairpin detonates every ground nail.
+function attemptHairpin(shooter) {
+  const now = performance.now();
+  if (shooter.shape !== 'x') return;
+  if (now - shooter.specialLastUsed < SPECIAL_COOLDOWN) return;
+  if (nailSymbols.length === 0) return;
+  shooter.specialLastUsed = now;
+  shooter.markCombatAction();
+  const nailsToDetonate = nailSymbols.slice();
+  for (const nail of nailsToDetonate) {
+    slashEffects.push({ type:'hairpinBlast', x:nail.x, y:nail.y, color:nail.color, radius:HAIRPIN_BLAST_RADIUS, duration:HAIRPIN_BLAST_DURATION, start:now });
+    for (const entity of getAllEntities()) {
+      if (!entity || entity === shooter || getSide(entity) === getSide(shooter) || entity.health <= 0) continue;
+      if (Math.hypot(entity.x - nail.x, entity.y - nail.y) <= HAIRPIN_RADIUS) {
+        damageEnemy(shooter, entity, HAIRPIN_DAMAGE, 'hairpin');
+      }
+    }
+  }
+  nailSymbols.length = 0;
 }
 
 // Megumi's attack: a short-range strike for 20 damage.
@@ -5129,6 +5616,8 @@ function handleSpecialKeyDown(shooter, target) {
     attemptHakariDance(shooter);
   } else if (shooter.shape === 'plus') {
     attemptYutaCopy(shooter);
+  } else if (shooter.shape === 'x') {
+    attemptHairpin(shooter);
   }
 }
 
@@ -5281,6 +5770,10 @@ class RikaProjectile {
     for (const o of obstacles) {
       if (!isWallActive(o)) continue;
       if (segmentCircleRectCollision(this.x, this.y, nextX, nextY, this.hitRadius, o)) {
+        if (abilityPassesThroughWall(o)) {
+          if (isBush(o)) damageWall(o, YUTA_LOVE_PROJECTILE_WALL_DAMAGE);
+          continue;
+        }
         damageWall(o, YUTA_LOVE_PROJECTILE_WALL_DAMAGE);
         this.dead = true;
         return;
@@ -5629,7 +6122,9 @@ function executeCopiedAbility(shooter, target = null) {
   const now = performance.now();
 
   // Copy reproduces the enemy's secondary/ability, not their Super.
-  if (shape === 'circle') {
+  if (shape === 'x') {
+    return attemptYutaCopiedNailShot(shooter, target);
+  } else if (shape === 'circle') {
     // Blue is target-dependent. Reacquire a valid target here as a final
     // safeguard for multiplayer, where the remote target can change between
     // the input packet and the ability actually executing.
@@ -6285,7 +6780,20 @@ function handleRoundWin(winner, loser) {
   }, WIN_BANNER_DURATION);
 }
 
+function randomMapIndex(previousIndex = -1) {
+  if (MAPS.length <= 1) return 0;
+  let index;
+  do {
+    index = Math.floor(Math.random() * MAPS.length);
+  } while (index === previousIndex);
+  return index;
+}
+
 function resetRound() {
+  const previousMapIndex = mapHasBeenInitialized ? currentMapIndex : -1;
+  currentMapIndex = randomMapIndex(previousMapIndex);
+  mapHasBeenInitialized = true;
+  applyMap(currentMapIndex);
   activePets.length = 0;
   onlinePetSerial = { 1: 0, 2: 0 };
   if (onlineMode && onlineMatchStarted) onlineResetRoundHealthSync();
@@ -6376,30 +6884,64 @@ function resetRound() {
     p.yutaCopyRingVisible = true;
   }
 
-  for (const o of obstacles) {
-    o.health = o.maxHealth; // walls come back fully repaired each round
-    o.x = o.homeX; o.y = o.homeY; // ...and back wherever a Pull Orb may have dragged them
-  }
+  resetMapWalls();
 
   projectiles = [];
   pullOrbs = [];
   furnaceShots = [];
+  nailProjectiles = [];
+  nailSymbols = [];
+  p1.enemyPiece = null;
+  p2.enemyPiece = null;
   for (const k of trackedKeys) keys[k] = false;
 }
 
 function drawArena() {
   ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = currentMapGroundColor;
+  ctx.fillRect(0, 0, W, H);
   for (const o of obstacles) {
-    const fraction = o.health / o.maxHealth; // 1 = untouched, 0 = fully shattered
-    if (fraction > 0) {
-      ctx.fillStyle = getVar('--wall');
+    const fraction = o.maxHealth > 0 ? o.health / o.maxHealth : 0;
+    if (isUnbreakableWall(o)) {
+      // Permanent silver cover. It never shows damage because it cannot take any.
+      ctx.fillStyle = '#c0c7cf';
       ctx.fillRect(o.x, o.y, o.w, o.h);
+      ctx.strokeStyle = '#8b949e';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(o.x + 0.5, o.y + 0.5, o.w - 1, o.h - 1);
+      continue;
     }
+
+    if (fraction > 0) {
+      if (isBush(o)) {
+        // Bushes are green and use their own 25 HP bar visually through
+        // progressively darkening foliage as they are damaged.
+        ctx.fillStyle = `rgb(${Math.round(40 + 25 * fraction)}, ${Math.round(120 + 65 * fraction)}, ${Math.round(45 + 20 * fraction)})`;
+        ctx.fillRect(o.x, o.y, o.w, o.h);
+        ctx.fillStyle = 'rgba(20,70,25,0.35)';
+        ctx.fillRect(o.x + 3, o.y + 3, o.w - 6, o.h - 6);
+        ctx.strokeStyle = '#2f6f35';
+        ctx.strokeRect(o.x + 0.5, o.y + 0.5, o.w - 1, o.h - 1);
+      } else {
+        // Brick-red normal walls.
+        ctx.fillStyle = '#a94442';
+        ctx.fillRect(o.x, o.y, o.w, o.h);
+        ctx.strokeStyle = '#7f3432';
+        ctx.strokeRect(o.x + 0.5, o.y + 0.5, o.w - 1, o.h - 1);
+        ctx.strokeStyle = 'rgba(55,20,18,0.45)';
+        ctx.beginPath();
+        ctx.moveTo(o.x, o.y + o.h / 2);
+        ctx.lineTo(o.x + o.w, o.y + o.h / 2);
+        ctx.moveTo(o.x + o.w / 2, o.y);
+        ctx.lineTo(o.x + o.w / 2, o.y + o.h / 2);
+        ctx.moveTo(o.x + 4, o.y + o.h / 2);
+        ctx.lineTo(o.x + 4, o.y + o.h);
+        ctx.stroke();
+      }
+    }
+
     if (fraction < 1) {
-      // A black square grows from the tile's center as it loses health —
-      // scaled so the black portion's AREA matches the missing health share.
-      // At 0 health the wall itself is gone, but this square stays behind.
-      const side = o.w * Math.sqrt(1 - fraction);
+      const side = o.w * Math.sqrt(Math.max(0, 1 - fraction));
       const bx = o.x + o.w / 2 - side / 2;
       const by = o.y + o.h / 2 - side / 2;
       ctx.fillStyle = '#000000';
@@ -6407,7 +6949,6 @@ function drawArena() {
     }
   }
 }
-
 function drawWinBanner() {
   if (!winBanner) return;
   const p = winBanner.player;
@@ -6513,6 +7054,13 @@ function loop() {
       updateHakariShutterDoors(p2);
       for (const proj of projectiles) proj.update();
       projectiles = projectiles.filter(proj => !proj.dead);
+      for (const nail of nailProjectiles) nail.update();
+      nailProjectiles = nailProjectiles.filter(nail => !nail.dead);
+      const nailNow = performance.now();
+      for (const player of [p1, p2]) {
+        if (player.enemyPiece && (!player.enemyPiece.target || player.enemyPiece.target.health <= 0)) player.enemyPiece = null;
+      }
+      nailSymbols = nailSymbols.filter(symbol => nailNow - symbol.createdAt < 7000);
       for (const orb of pullOrbs) orb.update();
       pullOrbs = pullOrbs.filter(orb => !orb.dead);
       for (const shot of furnaceShots) shot.update();
@@ -6547,8 +7095,13 @@ function loop() {
     if (p2.shutterAttack) drawHakariShutterDoors(p2.shutterAttack);
     drawHakariDanceWave(p1);
     drawHakariDanceWave(p2);
+    drawNobaraEnemyPieces();
+    drawNailSymbols();
     drawSlashEffects(ctx, performance.now());
     for (const proj of projectiles) proj.draw();
+    // Nobara's nails are stored separately from the generic projectile list.
+    // They still need to be rendered every frame.
+    for (const nail of nailProjectiles) nail.draw();
     for (const orb of pullOrbs) orb.draw();
     for (const shot of furnaceShots) shot.draw();
     for (const p of [p1, p2]) {
