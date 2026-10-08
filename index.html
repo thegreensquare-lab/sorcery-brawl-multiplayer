@@ -1519,7 +1519,7 @@ function connectOnline(isMobile = false) {
       const d = msg.data;
       const owner = Number(d.playerNumber) === 1 ? p1 : p2;
       if (owner && owner !== onlineLocalPlayer() && owner.shape === 'octagon' && (d.mode === 'todo' || d.mode === 'yuji')) {
-        owner.todoYujiMode = d.mode;
+        switchTodoYujiHealth(owner, d.mode);
         owner.todoDirectHitCount = 0;
         owner.todoLastDirectHitTime = 0;
         applyTodoYujiSwitchBlast(owner, Number.isFinite(d.x) ? d.x : owner.x, Number.isFinite(d.y) ? d.y : owner.y);
@@ -2473,7 +2473,7 @@ const CLEAVE_RANGE = 22; // Cleave is a shorter-range close-quarters strike
 const MEGUMI_STRIKE_COOLDOWN = 500; // ms, same cadence as a normal shot
 const TODO_ATTACK_DAMAGE = 10;
 const TODO_ATTACK_RANGE = 58;
-const TODO_ATTACK_COOLDOWN = 500;
+const TODO_ATTACK_COOLDOWN = 450;
 const TODO_TAKADA_DAMAGE = 5;
 const TODO_TAKADA_RANGE = TODO_ATTACK_RANGE * 2;
 const TODO_TAKADA_SPEED = 7;
@@ -3536,6 +3536,11 @@ class Player {
     this.yujiBlackFlashHitEntities = new Set();
     this.maxHealth = MAX_HEALTH_BY_SHAPE[shape] ?? MAX_HEALTH;
     this.health = this.maxHealth;
+    // Todo and Yuji keep independent HP pools while sharing the octagon body.
+    this.todoHealth = shape === 'octagon' ? this.maxHealth : null;
+    this.yujiHealth = shape === 'octagon' ? this.maxHealth : null;
+    this.todoDamaged = false;
+    this.yujiDamaged = false;
     this.lastCombatActionTime = performance.now();
     this.damaged = false; // health bar only shows once damage has been taken
     this.lastShotTime = -Infinity;
@@ -4135,6 +4140,10 @@ class Player {
       const beforeHealth = this.health;
       this.health = Math.min(this.maxHealth, this.health + PASSIVE_HEAL_AMOUNT * ticksDue);
       this.passiveHealNextTick += ticksDue * PASSIVE_HEAL_TICK;
+      if (this.shape === 'octagon') {
+        if (this.todoYujiMode === 'yuji') this.yujiHealth = this.health;
+        else this.todoHealth = this.health;
+      }
       if (this.health !== beforeHealth && this === onlineLocalPlayer()) onlineMarkLocalHealthChanged(this);
     }
   }
@@ -4146,6 +4155,10 @@ class Player {
     dealt = roundDamage(dealt);
     this.health = Math.max(0, roundDamage(this.health - dealt));
     this.damaged = true;
+    if (this.shape === 'octagon') {
+      if (this.todoYujiMode === 'yuji') { this.yujiHealth = this.health; this.yujiDamaged = true; }
+      else { this.todoHealth = this.health; this.todoDamaged = true; }
+    }
   }
 
   // Whether the E/U secondary ability is available right now, for the glow ring.
@@ -4513,7 +4526,13 @@ class Player {
       ctx.fillStyle = '#ffffff';
       ctx.shadowColor = '#000000';
       ctx.shadowBlur = 3;
-      ctx.fillText(formatHealth(this.health), this.x, by - 4);
+      const yujiSpeedBonus = this.shape === 'octagon' && this.todoYujiMode === 'yuji'
+        ? Math.max(0, Math.round((this.getSpeedMultiplier() - 1) * 100))
+        : 0;
+      const hpLabel = this.shape === 'octagon' && this.todoYujiMode === 'yuji'
+        ? `${formatHealth(this.health)}  ${yujiSpeedBonus}%`
+        : formatHealth(this.health);
+      ctx.fillText(hpLabel, this.x, by - 4);
       ctx.restore();
     }
 
@@ -6082,11 +6101,12 @@ function attemptTodoAttack(shooter, target) {
   if (dist <= hitRange && !segmentHitsActiveWall(shooter.x, shooter.y, target.x, target.y)) {
     // Yuji keeps the same short-range punch animation/range as Todo, but none
     // of Todo's combo, swap, or missed-projectile mechanics. His normal punch
-    // simply deals 20 damage (or 15 during the Black Flash follow-up buff).
+    // simply deals 10 damage (or 15 during the Black Flash follow-up buff).
     if (shooter.todoYujiMode === 'yuji') {
       const attackDamage = performance.now() < shooter.yujiBlackFlashUntil
         ? YUJI_BLACK_FLASH_ATTACK_DAMAGE : YUJI_ATTACK_DAMAGE;
       damageEnemy(shooter, target, attackDamage, 'yujiPunch');
+      applyYujiHitSpeedBoost(shooter);
       return;
     }
 
@@ -6237,6 +6257,21 @@ function applyTodoYujiSwitchBlast(shooter, x = shooter.x, y = shooter.y) {
   }
 }
 
+function switchTodoYujiHealth(shooter, nextMode) {
+  if (!shooter || shooter.shape !== 'octagon' || shooter.todoYujiMode === nextMode) return;
+  if (shooter.todoYujiMode === 'yuji') {
+    shooter.yujiHealth = shooter.health;
+    shooter.yujiDamaged = shooter.damaged;
+  } else {
+    shooter.todoHealth = shooter.health;
+    shooter.todoDamaged = shooter.damaged;
+  }
+  shooter.todoYujiMode = nextMode;
+  const saved = nextMode === 'yuji' ? shooter.yujiHealth : shooter.todoHealth;
+  shooter.health = Math.max(0, Math.min(shooter.maxHealth, Number.isFinite(saved) ? saved : shooter.maxHealth));
+  shooter.damaged = nextMode === 'yuji' ? shooter.yujiDamaged : shooter.todoDamaged;
+}
+
 function attemptTodoYujiSwitch(shooter) {
   const now = performance.now();
   if (shooter.shape !== 'octagon') return;
@@ -6244,7 +6279,8 @@ function attemptTodoYujiSwitch(shooter) {
   if (now - shooter.superLastUsed < TODO_YUJI_SWITCH_COOLDOWN) return;
   shooter.superLastUsed = now;
   shooter.markCombatAction();
-  shooter.todoYujiMode = shooter.todoYujiMode === 'todo' ? 'yuji' : 'todo';
+  const nextMode = shooter.todoYujiMode === 'todo' ? 'yuji' : 'todo';
+  switchTodoYujiHealth(shooter, nextMode);
   shooter.todoDirectHitCount = 0;
   shooter.todoLastDirectHitTime = 0;
   applyTodoYujiSwitchBlast(shooter);
@@ -7706,6 +7742,8 @@ function resetRound() {
   p2.maxHealth = MAX_HEALTH_BY_SHAPE[p2.shape] ?? MAX_HEALTH;
   p1.health = p1.maxHealth; p2.health = p2.maxHealth;
   p1.damaged = false; p2.damaged = false;
+  if (p1.shape === 'octagon') { p1.todoHealth = p1.maxHealth; p1.yujiHealth = p1.maxHealth; p1.todoDamaged = false; p1.yujiDamaged = false; }
+  if (p2.shape === 'octagon') { p2.todoHealth = p2.maxHealth; p2.yujiHealth = p2.maxHealth; p2.todoDamaged = false; p2.yujiDamaged = false; }
   p1.charging = false; p2.charging = false;
   p1.dashing = false; p2.dashing = false;
   p1.lastDir = { x: 0, y: 0 }; p2.lastDir = { x: 0, y: 0 };
@@ -7788,7 +7826,11 @@ function resetRound() {
     p.yutaCopyTargetShape = null;
     p.yutaCopyAvailable = true;
     p.yutaCopyRingVisible = true;
-    if (p.shape === 'octagon') p.todoYujiMode = randomTodoYujiMode();
+    if (p.shape === 'octagon') {
+      p.todoYujiMode = randomTodoYujiMode();
+      p.health = p.todoYujiMode === 'yuji' ? p.yujiHealth : p.todoHealth;
+      p.damaged = p.todoYujiMode === 'yuji' ? p.yujiDamaged : p.todoDamaged;
+    }
   }
 
   resetMapWalls();
