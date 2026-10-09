@@ -1785,7 +1785,7 @@ function connectOnline(isMobile = false) {
           if (winner && winner !== remote) handleRoundWin(winner, remote);
         }
       }
-      if (Number.isFinite(d.yutaCopyCharges)) remote.yutaCopyCharges = Math.max(0, Math.min(2, d.yutaCopyCharges));
+      if (Number.isFinite(d.yutaCopyCharges)) remote.yutaCopyCharges = Math.max(0, Math.min(6, d.yutaCopyCharges));
       remote.yutaCopyAvailable = !!d.yutaCopyAvailable;
       remote.yutaCopySymbolShape = d.yutaCopySymbolShape || null;
       remote.yutaCopyMegumiPetType = Number.isFinite(d.yutaCopyMegumiPetType) ? d.yutaCopyMegumiPetType : null;
@@ -2326,12 +2326,12 @@ const SQUARE_PROJECTILE_VISUAL_LENGTH = 18; // Piercing Blood is drawn as a wide
 const SQUARE_PROJECTILE_VISUAL_WIDTH = 9;
 const NAIL_SHOT_DAMAGE = 9;
 const NAIL_SHOT_WALL_DAMAGE = 2;
-const NAIL_SHOT_RANGE = W / 3;
+const NAIL_SHOT_RANGE = W * 0.55;
 const NAIL_SHOT_SPEED = 8;
 const NAIL_SHOT_COOLDOWN = 550;
-const NAIL_SHOT_SPREAD_DEG = 10;
-const YUTA_NOBARA_NAIL_RANGE = W / 2;
-const YUTA_NOBARA_NAIL_SPREAD_DEG = 4;
+const NAIL_SHOT_SPREAD_DEG = 6;
+const YUTA_NOBARA_NAIL_RANGE = W * 0.75;
+const YUTA_NOBARA_NAIL_SPREAD_DEG = 2.5;
 const NAIL_SHOT_HALF_WIDTH = 7;
 const NAIL_SHOT_LENGTH = 28;
 const NAIL_SYMBOL_SIZE = 7;
@@ -4676,23 +4676,36 @@ class Player {
         ctx.restore();
       }
     } else if (this.shape === 'plus') {
-      // Yuta's Copy ring uses the same timer/charge model as Sukuna's
-      // multi-use secondary: full for two copied uses, half for one, and
-      // completely hidden during the normal cooldown after the final use.
+      // Yuta's Copy ring is split into two segments for regular copied abilities
+      // and three segments for copied Cleave, matching the available uses.
       const now = performance.now();
-      const charges = this.yutaCopyRika ? 0 : Math.max(0, Math.min(2, this.yutaCopyCharges));
+      const copiedCleave = this.yutaCopiedShape === 'rhombus';
+      // Two original Copy charges, each split into three Cleave swings.
+      const maxCharges = copiedCleave ? 6 : 2;
+      const charges = this.yutaCopyRika ? 0 : Math.max(0, Math.min(maxCharges, this.yutaCopyCharges));
       const cooldownReady = now - this.specialLastUsed >= SPECIAL_COOLDOWN;
-      const fraction = this.yutaCopyRika ? 0 : (this.yutaCopyFallback && charges > 0 ? 1 : (charges > 0 ? charges / 2 : (cooldownReady ? 1 : 0)));
-      if (fraction > 0) {
+      const activeSegments = this.yutaCopyFallback && charges > 0 ? maxCharges : charges;
+      if (!this.yutaCopyRika && (activeSegments > 0 || cooldownReady)) {
         const pulse = 0.5 + 0.5 * Math.sin(now / 250);
         ctx.save();
         ctx.strokeStyle = '#ffffff';
         ctx.globalAlpha = 0.4 + 0.4 * pulse;
         ctx.lineWidth = 3;
         ctx.lineCap = 'butt';
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size + 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * fraction);
-        ctx.stroke();
+        const startAngle = -Math.PI / 2;
+        const gap = 0.12;
+        for (let i = 0; i < maxCharges; i++) {
+          if (i >= activeSegments && !cooldownReady) continue;
+          const segmentAngle = Math.PI * 2 / maxCharges;
+          // The wider break at the halfway point separates the two original
+          // Copy charges, with each half containing three Cleave swings.
+          const midpointGap = copiedCleave && (i === 2 || i === 3) ? 0.24 : gap;
+          const segmentStart = startAngle + i * segmentAngle + midpointGap / 2;
+          const segmentEnd = startAngle + (i + 1) * segmentAngle - midpointGap / 2;
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.size + 8, segmentStart, segmentEnd);
+          ctx.stroke();
+        }
         ctx.restore();
       }
     } else if (this.isSpecialReady()) {
@@ -7282,7 +7295,7 @@ function executeCopiedAbility(shooter, target = null) {
   const shape = shooter.yutaCopiedShape;
   // Some copied abilities do not require a target (Hakari Dance, Megumi shikigami,
   // and Cursed Speech). Only acquire/require a target for targeted abilities.
-  if (shape !== 'pentagon' && shape !== 'megumi' && shape !== 'star' && shape !== 'cursedSpeech' && shape !== 'plus' && shape !== 'todo' && shape !== 'yuji') {
+  if (shape !== 'pentagon' && shape !== 'megumi' && shape !== 'star' && shape !== 'cursedSpeech' && shape !== 'plus' && shape !== 'todo' && shape !== 'yuji' && shape !== 'rhombus') {
     target = target || getNearestEnemy(shooter);
     if (!target) return false;
   } else {
@@ -7436,9 +7449,9 @@ function finishYutaCopy(shooter, success) {
   shooter.yutaNaoyaKnockback = false;
 
   if (success) {
-    // Rika returned: the enemy's geometric shape is stored and Yuta gets two
-    // uses. The Copy ring is full (two uses represented as a full circle).
-    shooter.yutaCopyCharges = 2;
+    // Rika returned: normal copied abilities keep their two uses. Copied
+    // Cleave splits each of those two uses into three swings, for six total.
+    shooter.yutaCopyCharges = copiedShape === 'rhombus' ? 6 : 2;
     shooter.yutaCopyAvailable = false;
     shooter.yutaCopySymbolShape = (copiedShape === 'cursedSpeech' ? 'plus' : copiedShape);
     shooter.yutaCopiedShape = copiedShape;
@@ -7509,15 +7522,16 @@ function attemptYutaCopy(shooter) {
   // Successful return: two uses of the copied ability. A use is consumed only
   // when the copied ability actually executes, and that use starts cooldown.
   if (shooter.yutaCopyCharges > 0 && shooter.yutaCopiedShape) {
-    // The first copied use is immediate. After it, the second use unlocks after 2 seconds.
-    if (shooter.yutaCopyCharges === 1 && now < (shooter.yutaCopySecondUseReadyAt || 0)) return;
+    // Normal copied abilities pause briefly before their second use. Copied
+    // Cleave has six swings arranged as two groups of three, with no pause between swings.
+    if (shooter.yutaCopiedShape !== 'rhombus' && shooter.yutaCopyCharges === 1 && now < (shooter.yutaCopySecondUseReadyAt || 0)) return;
     const target = getNearestEnemy(shooter);
     const copiedNeedsTarget = !['pentagon','megumi','star','cursedSpeech','plus','todo','yuji'].includes(shooter.yutaCopiedShape);
     if (copiedNeedsTarget && !target) return;
     if (!executeCopiedAbility(shooter, target)) return;
     shooter.markCombatAction();
     shooter.yutaCopyCharges = Math.max(0, shooter.yutaCopyCharges - 1);
-    if (shooter.yutaCopyCharges === 1) {
+    if (shooter.yutaCopiedShape !== 'rhombus' && shooter.yutaCopyCharges === 1) {
       shooter.yutaCopySecondUseReadyAt = now + YUTA_COPY_SECOND_USE_COOLDOWN;
     }
     // If this was the first stolen use from Megumi, independently randomize
@@ -7821,8 +7835,8 @@ function applyKnockback(shooter, target) {
 function attemptCleave(shooter, target) {
   if (shooter.cleaveCharges <= 0) return; // recharging, can't use yet
 
-  const dist = Math.hypot(target.x - shooter.x, target.y - shooter.y);
-  const hitsTarget = dist <= CLEAVE_RANGE + shooter.size + target.size;
+  const dist = target ? Math.hypot(target.x - shooter.x, target.y - shooter.y) : Infinity;
+  const hitsTarget = !!target && target.health > 0 && dist <= CLEAVE_RANGE + shooter.size + target.size;
   const hitWalls = obstacles.filter(o =>
     isWallActive(o) && circleRectOverlap(shooter.x, shooter.y, CLEAVE_RANGE + shooter.size, o));
 
