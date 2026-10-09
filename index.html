@@ -2161,47 +2161,28 @@ document.querySelectorAll('.shape-grid').forEach(grid => {
   });
 });
 
-// Random uses a shuffled deck so every character is selected once before
-// any character repeats. Hakari, Nobara, Yuta, and Todo/Yuji are explicit
-// entries, while retaining the shape IDs used by the combat engine.
-const RANDOM_CHARACTER_POOL = [
-  { id: 'circle', shape: 'circle' },
-  { id: 'square', shape: 'square' },
-  { id: 'triangle', shape: 'triangle' },
-  { id: 'rhombus', shape: 'rhombus' },
-  { id: 'star', shape: 'star' },
-  { id: 'hakari', shape: 'pentagon' },
-  { id: 'yuta', shape: 'plus' },
-  { id: 'nobara', shape: 'x' },
-  { id: 'todo', shape: 'octagon', todoYujiMode: 'todo' },
-  { id: 'yuji', shape: 'octagon', todoYujiMode: 'yuji' }
-];
-let randomCharacterDeck = [];
-
+// Random selects from ten equally likely characters, counting Todo and Yuji
+// separately even though they share the same octagon shape.
+const RANDOM_CHARACTER_POOL = ['circle', 'square', 'triangle', 'rhombus', 'star', 'pentagon', 'plus', 'x', 'todo', 'yuji'];
 function randomCharacterChoice() {
-  if (randomCharacterDeck.length === 0) {
-    randomCharacterDeck = RANDOM_CHARACTER_POOL.slice();
-    // Fisher-Yates shuffle, with crypto-backed randomness where available.
-    for (let i = randomCharacterDeck.length - 1; i > 0; i--) {
-      let j;
-      if (window.crypto && crypto.getRandomValues) {
-        const buf = new Uint32Array(1);
-        const max = Math.floor(0x100000000 / (i + 1)) * (i + 1);
-        do { crypto.getRandomValues(buf); } while (buf[0] >= max);
-        j = buf[0] % (i + 1);
-      } else {
-        j = Math.floor(Math.random() * (i + 1));
-      }
-      [randomCharacterDeck[i], randomCharacterDeck[j]] = [randomCharacterDeck[j], randomCharacterDeck[i]];
-    }
+  const n = RANDOM_CHARACTER_POOL.length;
+  if (window.crypto && crypto.getRandomValues) {
+    const max = Math.floor(0x100000000 / n) * n;
+    const buf = new Uint32Array(1);
+    do { crypto.getRandomValues(buf); } while (buf[0] >= max);
+    return RANDOM_CHARACTER_POOL[buf[0] % n];
   }
-  return randomCharacterDeck.pop();
+  return RANDOM_CHARACTER_POOL[Math.floor(Math.random() * n)];
 }
 
 function assignRandomCharacter(player) {
   const choice = randomCharacterChoice();
-  player.shape = choice.shape;
-  if (choice.todoYujiMode) player.todoYujiMode = choice.todoYujiMode;
+  if (choice === 'todo' || choice === 'yuji') {
+    player.shape = 'octagon';
+    player.todoYujiMode = choice;
+  } else {
+    player.shape = choice;
+  }
 }
 
 function randomTodoYujiMode() {
@@ -2335,6 +2316,7 @@ const DASH_DAMAGE = 20;
 const DASH_BUSH_DAMAGE = 15;
 const DASH_WALL_DAMAGE = 5;
 const DASH_COOLDOWN = 350; // ms
+const NAOYA_POST_DASH_COOLDOWN = 300; // ms after a Naoya dash ends
 const DASH_STILL_THRESHOLD = 250; // ms of no movement before auto-aim kicks in
 const SQUARE_DAMAGE = 1;
 const SQUARE_FIRE_RATE = 45; // ms between stream shots (lower = closer together)
@@ -2381,7 +2363,7 @@ const TODO_YUJI_SWITCH_COOLDOWN = 5000; // ms between Switch uses
 const TODO_YUJI_SWITCH_BLAST_RADIUS = 60;
 const TODO_YUJI_SWITCH_BLAST_DAMAGE = 5;
 const TODO_YUJI_SWITCH_WALL_DAMAGE = 1;
-const YUJI_BLACK_FLASH_COOLDOWN = 4000;
+const YUJI_BLACK_FLASH_COOLDOWN = SPECIAL_COOLDOWN;
 const YUJI_BLACK_FLASH_RANGE = W / 2;
 const YUJI_BLACK_FLASH_SPEED = 8;
 const YUJI_BLACK_FLASH_DAMAGE = 20;
@@ -2402,6 +2384,7 @@ const HAKARI_SHUTTER_DAMAGE = 20;
 const HAKARI_DANCE_COOLDOWN = 5000;
 const HAKARI_DANCE_DURATION = 1000;
 const HAKARI_DANCE_PUSH_SPEED = 8;
+const HAKARI_DANCE_DAMAGE = 5;
 const HAKARI_DANCE_RANGE = 180;
 const HAKARI_DANCE_WAVE_SPEED = 360; // visual wave expansion, px/sec
 const HAKARI_PACHINKO_HEALTH = 75;
@@ -2477,7 +2460,7 @@ const CHOSO_WAVE_DURATION = 2500; // ms the wave (and Choso's self-lock) lasts, 
 const CHOSO_WAVE_GROWTH_TIME = 600; // ms to grow from 0 to full range; holds there after
 const CHOSO_WAVE_RANGE = W / 2; // max forward length
 const CHOSO_WAVE_WIDTH = 132; // 1.5x its original width (was 2x Purple's old radius of 22)
-const CHOSO_WAVE_DAMAGE = 30;
+const CHOSO_WAVE_DAMAGE = 15;
 const CHOSO_WAVE_BUSH_DAMAGE = 1; // dealt once, the moment it first touches the enemy
 const CHOSO_WAVE_COOLDOWN = SUPER_AFTER_COOLDOWN; // ms, starts once the wave ends
 const CHOSO_WAVE_PUSH_SPEED = 4; // px/frame the enemy is shoved along the wave's direction
@@ -2693,7 +2676,7 @@ const TODO_DIRECT_COMBO_WINDOW = 1000;
 const TODO_DIRECT_COMBO_REQUIRED = 3;
 const TODO_RECT_DURATION = 130;
 const TODO_BOOGIE_SPEED = 7;
-const TODO_BOOGIE_COOLDOWN = 650;
+const TODO_BOOGIE_COOLDOWN = SPECIAL_COOLDOWN;
 const TODO_BOOGIE_PROJECTILE_SIZE = 9;
 const TODO_BOOGIE_WALL_GAP = 3;
 let todoTakadas = [];
@@ -2731,7 +2714,7 @@ function attemptStrawDoll(shooter) {
 // adapt anyone to anything; it's purely on the receiving end.
 const MAHORAGA_HEALTH = 150;
 const MAHORAGA_SIZE = 20; // for drawing + collision — bigger than a player
-const MAHORAGA_SPEED = 2.6; // px/frame it chases the enemy — faster than before
+const MAHORAGA_SPEED = 1.8; // px/frame; slower chase speed so opponents can create distance
 const MAHORAGA_CONTACT_RANGE = 30; // point-blank
 const MAHORAGA_CONTACT_DAMAGE = 25; // Mahoraga deals 25 damage per contact hit.
 const MAHORAGA_CONTACT_COOLDOWN = 600; // ms between contact hits
@@ -3990,8 +3973,6 @@ class Player {
       return;
     }
 
-    if (this.danceActive) return; // Dance locks Hakari in place for its full duration
-
     if (this.knockback) {
       this.updateKnockback(other);
       return;
@@ -4282,6 +4263,7 @@ class Player {
     }
     if (hitWall) {
       this.dashing = false; // hit a wall, dash ends exactly there
+      if (this.shape === 'triangle') this.naoyaDashCooldownUntil = performance.now() + NAOYA_POST_DASH_COOLDOWN;
       if (this.shape === 'plus') this.yutaSlashBlockedUntil = performance.now() + YUTA_POST_DASH_SLASH_COOLDOWN;
     }
 
@@ -4301,6 +4283,7 @@ class Player {
         if (this.shape === 'plus' && this.yutaNaoyaKnockback && enemy.health > 0) {
           applyKnockback(this, enemy);
           this.dashing = false;
+          if (this.shape === 'triangle') this.naoyaDashCooldownUntil = performance.now() + NAOYA_POST_DASH_COOLDOWN;
           if (this.shape === 'plus') this.yutaSlashBlockedUntil = performance.now() + YUTA_POST_DASH_SLASH_COOLDOWN;
           break;
         }
@@ -4313,6 +4296,7 @@ class Player {
           enemy.frozenUntil = 0;
           applyKnockback(this, enemy);
           this.dashing = false; // player hit ends the dash
+          if (this.shape === 'triangle') this.naoyaDashCooldownUntil = performance.now() + NAOYA_POST_DASH_COOLDOWN;
           if (this.shape === 'plus') this.yutaSlashBlockedUntil = performance.now() + YUTA_POST_DASH_SLASH_COOLDOWN;
           break;
         }
@@ -4321,6 +4305,7 @@ class Player {
 
     if (performance.now() >= this.dashEndTime) {
       this.dashing = false;
+      if (this.shape === 'triangle') this.naoyaDashCooldownUntil = performance.now() + NAOYA_POST_DASH_COOLDOWN;
       if (this.shape === 'plus') this.yutaSlashBlockedUntil = performance.now() + YUTA_POST_DASH_SLASH_COOLDOWN;
     }
   }
@@ -5536,47 +5521,57 @@ class FurnaceShot {
   }
 
   update() {
-    this.x += this.vx;
-    this.y += this.vy;
+    // Sweep the projectile along its path in small increments. Testing only
+    // the final position lets a fast Furnace skip through thin wall tiles.
+    const travel = Math.max(Math.abs(this.vx), Math.abs(this.vy));
+    const steps = Math.max(1, Math.ceil(travel));
+    const stepX = this.vx / steps;
+    const stepY = this.vy / steps;
+    const hitBushes = new Set();
 
-    if (this.remoteVisual) {
-      if (!this.target || this.target.health <= 0) { this.dead = true; return; }
+    for (let i = 0; i < steps; i++) {
+      this.x += stepX;
+      this.y += stepY;
+
+      if (this.x < 0 || this.x > W || this.y < 0 || this.y > H) {
+        this.dead = true;
+        return;
+      }
+
+      let hitWall = null;
       for (const o of obstacles) {
         if (!isWallActive(o)) continue;
-        if (this.x > o.x && this.x < o.x + o.w && this.y > o.y && this.y < o.y + o.h) {
-          if (abilityPassesThroughWall(o)) continue;
+        if (circleRectOverlap(this.x, this.y, FURNACE_PROJECTILE_RADIUS, o)) {
+          hitWall = o;
+          break;
+        }
+      }
+      if (hitWall) {
+        if (isBush(hitWall)) {
+          // Furnace burns through bushes without losing momentum. Damage each
+          // bush at most once per projectile, then keep sweeping forward.
+          if (!hitBushes.has(hitWall)) {
+            hitBushes.add(hitWall);
+            if (!this.remoteVisual) damageWall(hitWall, hitWall.health);
+          }
+        } else {
+          // Solid walls still stop Furnace and trigger its explosion.
+          if (!this.remoteVisual) this.explode();
           this.dead = true;
           return;
         }
       }
-      const visualDist = Math.hypot(this.x - this.target.x, this.y - this.target.y);
-      if (visualDist < (this.target.size || this.target.radius || 13) + FURNACE_PROJECTILE_RADIUS) this.dead = true;
-      return;
-    }
 
-    if (this.x < 0 || this.x > W || this.y < 0 || this.y > H) {
-      this.dead = true;
-      return;
-    }
-
-    for (const o of obstacles) {
-      if (!isWallActive(o)) continue;
-      if (this.x > o.x && this.x < o.x + o.w && this.y > o.y && this.y < o.y + o.h) {
-        if (isUnbreakableWall(o)) continue;
-        if (isBush(o)) {
-          damageWall(o, o.health);
-          continue;
-        }
-        this.explode();
+      if (!this.target || this.target.health <= 0) {
         this.dead = true;
         return;
       }
-    }
-
-    const dist = Math.hypot(this.x - this.target.x, this.y - this.target.y);
-    if (dist < this.target.size + FURNACE_PROJECTILE_RADIUS) {
-      this.explode();
-      this.dead = true;
+      const targetRadius = (this.target.size || this.target.radius || 13) + FURNACE_PROJECTILE_RADIUS;
+      if (Math.hypot(this.x - this.target.x, this.y - this.target.y) < targetRadius) {
+        if (!this.remoteVisual) this.explode();
+        this.dead = true;
+        return;
+      }
     }
   }
 
@@ -5637,7 +5632,10 @@ function processBurn(entity) {
   if (!Number.isFinite(entity.burnEndTime) || now >= entity.burnEndTime) return;
   if (!Number.isFinite(entity.burnNextTickTime) || now < entity.burnNextTickTime) return;
 
-  entity.burnNextTickTime += FURNACE_BURN_TICK_INTERVAL;
+  // Schedule the next tick from this tick, avoiding missed-tick bursts if a
+  // frame stalls. The burn source remains the attacking player for attribution
+  // and multiplayer damage synchronization.
+  entity.burnNextTickTime = now + FURNACE_BURN_TICK_INTERVAL;
   damageEnemy(entity.burnSource || null, entity, FURNACE_BURN_TICK_DAMAGE, 'furnaceBurn');
   if (entity.health <= 0 && entity instanceof Player) {
     handleRoundWin(entity.burnSource, entity);
@@ -6367,6 +6365,7 @@ function attemptYujiBlackFlash(shooter, target) {
     dirX = dx / dist; dirY = dy / dist;
   }
 
+  if (dashWouldFightWave(shooter, dirX, dirY)) return false;
   shooter.specialLastUsed = now;
   shooter.markCombatAction();
   shooter.yujiBlackFlashActive = true;
@@ -6779,6 +6778,7 @@ function attemptHakariDance(shooter) {
   shooter.danceWaveStartTime = now;
   shooter.danceWaveRadius = 0;
   shooter.danceWallHits = new Set();
+  shooter.danceHitEntities = new Set();
   shooter.charging = false;
   shooter.dashing = false;
   shooter.holdStartTime = null;
@@ -6827,6 +6827,14 @@ function updateHakariDance(shooter) {
     const dist = Math.hypot(dx, dy) || 0.001;
     const enemySize = enemy.size || enemy.radius || 13;
     if (dist > HAKARI_DANCE_RANGE + shooter.size + enemySize) continue;
+
+    // Each opponent or pet is damaged once per Dance activation.
+    if (!shooter.danceHitEntities) shooter.danceHitEntities = new Set();
+    if (!shooter.danceHitEntities.has(enemy)) {
+      shooter.danceHitEntities.add(enemy);
+      damageEnemy(shooter, enemy, HAKARI_DANCE_DAMAGE, 'dance');
+      if (enemy.health <= 0) continue;
+    }
 
     const nx = dx / dist;
     const ny = dy / dist;
@@ -7841,15 +7849,34 @@ function maybeRefillCleave(player) {
   }
 }
 
+
+// A player caught inside Choso's Wave cannot dash back toward the wave's
+// source. Dashing with the wave's travel direction (or sideways) remains OK.
+function dashWouldFightWave(entity, dirX, dirY) {
+  const now = performance.now();
+  for (const waveOwner of [p1, p2]) {
+    if (!waveOwner || waveOwner === entity || !waveOwner.wavingActive || now >= waveOwner.waveEndTime) continue;
+    const ox = waveOwner.waveOriginX, oy = waveOwner.waveOriginY;
+    const dx = entity.x - ox, dy = entity.y - oy;
+    const forward = dx * waveOwner.waveDir.x + dy * waveOwner.waveDir.y;
+    const lateral = -dx * waveOwner.waveDir.y + dy * waveOwner.waveDir.x;
+    const size = entity.size || entity.radius || 13;
+    const touching = forward >= -size && forward <= waveOwner.waveLength + size &&
+      Math.abs(lateral) <= CHOSO_WAVE_WIDTH / 2 + size;
+    const againstWave = dirX * waveOwner.waveDir.x + dirY * waveOwner.waveDir.y < -0.15;
+    if (touching && againstWave) return true;
+  }
+  return false;
+}
+
 // Triangle attack: a fast dash that passes through enemies and pets (but not walls),
 // damaging pets without stopping and ending on a player hit. Dashes in the last direction moved, or toward
 // the enemy if the player hasn't moved yet.
 function startDash(shooter, target) {
   if (shooter.dashing) return;
   const now = performance.now();
+  if (shooter.shape === 'triangle' && now < (shooter.naoyaDashCooldownUntil || 0)) return;
   if (now - shooter.lastShotTime < DASH_COOLDOWN) return;
-  shooter.lastShotTime = now;
-  shooter.markCombatAction();
 
   let dirX, dirY;
   if (now - shooter.lastMoveTime >= DASH_STILL_THRESHOLD) {
@@ -7861,6 +7888,9 @@ function startDash(shooter, target) {
     dirX = shooter.lastDir.x; dirY = shooter.lastDir.y;
   }
 
+  if (dashWouldFightWave(shooter, dirX, dirY)) return;
+  shooter.lastShotTime = now;
+  shooter.markCombatAction();
   shooter.dashing = true;
   shooter.dashDir = { x: dirX, y: dirY };
   shooter.dashEndTime = now + DASH_DURATION;
@@ -8060,6 +8090,8 @@ function resetRound() {
     p.pachinkoPet = null;
     p.danceActive = false;
     p.danceEndTime = 0;
+    p.danceHitEntities = new Set();
+    p.naoyaDashCooldownUntil = 0;
     p.yutaComboCount = 0;
     p.yutaComboExpiresAt = 0;
     p.yutaSlashBlockedUntil = 0;
