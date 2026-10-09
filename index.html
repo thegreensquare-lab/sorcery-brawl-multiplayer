@@ -2161,28 +2161,47 @@ document.querySelectorAll('.shape-grid').forEach(grid => {
   });
 });
 
-// Random selects from ten equally likely characters, counting Todo and Yuji
-// separately even though they share the same octagon shape.
-const RANDOM_CHARACTER_POOL = ['circle', 'square', 'triangle', 'rhombus', 'star', 'pentagon', 'plus', 'x', 'todo', 'yuji'];
+// Random uses a shuffled deck so every character is selected once before
+// any character repeats. Hakari, Nobara, Yuta, and Todo/Yuji are explicit
+// entries, while retaining the shape IDs used by the combat engine.
+const RANDOM_CHARACTER_POOL = [
+  { id: 'circle', shape: 'circle' },
+  { id: 'square', shape: 'square' },
+  { id: 'triangle', shape: 'triangle' },
+  { id: 'rhombus', shape: 'rhombus' },
+  { id: 'star', shape: 'star' },
+  { id: 'hakari', shape: 'pentagon' },
+  { id: 'yuta', shape: 'plus' },
+  { id: 'nobara', shape: 'x' },
+  { id: 'todo', shape: 'octagon', todoYujiMode: 'todo' },
+  { id: 'yuji', shape: 'octagon', todoYujiMode: 'yuji' }
+];
+let randomCharacterDeck = [];
+
 function randomCharacterChoice() {
-  const n = RANDOM_CHARACTER_POOL.length;
-  if (window.crypto && crypto.getRandomValues) {
-    const max = Math.floor(0x100000000 / n) * n;
-    const buf = new Uint32Array(1);
-    do { crypto.getRandomValues(buf); } while (buf[0] >= max);
-    return RANDOM_CHARACTER_POOL[buf[0] % n];
+  if (randomCharacterDeck.length === 0) {
+    randomCharacterDeck = RANDOM_CHARACTER_POOL.slice();
+    // Fisher-Yates shuffle, with crypto-backed randomness where available.
+    for (let i = randomCharacterDeck.length - 1; i > 0; i--) {
+      let j;
+      if (window.crypto && crypto.getRandomValues) {
+        const buf = new Uint32Array(1);
+        const max = Math.floor(0x100000000 / (i + 1)) * (i + 1);
+        do { crypto.getRandomValues(buf); } while (buf[0] >= max);
+        j = buf[0] % (i + 1);
+      } else {
+        j = Math.floor(Math.random() * (i + 1));
+      }
+      [randomCharacterDeck[i], randomCharacterDeck[j]] = [randomCharacterDeck[j], randomCharacterDeck[i]];
+    }
   }
-  return RANDOM_CHARACTER_POOL[Math.floor(Math.random() * n)];
+  return randomCharacterDeck.pop();
 }
 
 function assignRandomCharacter(player) {
   const choice = randomCharacterChoice();
-  if (choice === 'todo' || choice === 'yuji') {
-    player.shape = 'octagon';
-    player.todoYujiMode = choice;
-  } else {
-    player.shape = choice;
-  }
+  player.shape = choice.shape;
+  if (choice.todoYujiMode) player.todoYujiMode = choice.todoYujiMode;
 }
 
 function randomTodoYujiMode() {
