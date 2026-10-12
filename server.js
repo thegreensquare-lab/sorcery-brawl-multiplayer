@@ -16,7 +16,8 @@ const SHAPES = [
   "pentagon", // Hakari
   "plus",     // Yuta
   "x",        // Nobara
-  "octagon"   // Todo / Yuji
+  "octagon",  // Todo / Yuji
+  "trapezoid" // Jogo
 ];
 
 const PET_TYPES = [1, 2, 3];
@@ -100,10 +101,23 @@ function startMatch(room) {
   if (!room.players.every(player => player.ready)) return;
 
   // Make sure both players selected a valid character.
-  if (!room.players.every(player =>
-    SHAPES.includes(player.selectedShape) ||
-    player.selectedShape === "random"
-  )) {
+  const invalidPlayer = room.players.find(player =>
+    !SHAPES.includes(player.selectedShape) &&
+    player.selectedShape !== "random"
+  );
+
+  if (invalidPlayer) {
+    console.warn(
+      `[${[...rooms.entries()].find(([, value]) => value === room)?.[0] || "room"}] ` +
+      `Cannot start: Player ${invalidPlayer.number} has unsupported selection ` +
+      `${JSON.stringify(invalidPlayer.selectedShape)}`
+    );
+
+    send(invalidPlayer.socket, {
+      type: "error",
+      message: `Your selected character (${invalidPlayer.selectedShape || "none"}) isn't supported by this server. Please select again.`
+    });
+
     return;
   }
 
@@ -117,6 +131,11 @@ function startMatch(room) {
   p2.shape = chooseShape(p2);
 
   room.roundEndHandled = false;
+
+  console.log(
+    `Starting match: P1=${p1.shape} (selected ${p1.selectedShape}), ` +
+    `P2=${p2.shape} (selected ${p2.selectedShape})`
+  );
 
   broadcast(room, {
     type: "match-start",
@@ -207,10 +226,15 @@ wss.on("connection", socket => {
         return;
       }
 
-      // The server assigns the player number.
+      // Assign whichever player number is actually free.
+      // This prevents duplicate player numbers after a disconnect.
+      const availableNumber = room.players.some(p => p.number === 1)
+        ? 2
+        : 1;
+
       player = {
         socket,
-        number: room.players.length + 1,
+        number: availableNumber,
         ready: false,
         selectedShape: null,
         shape: null
@@ -341,7 +365,7 @@ wss.on("connection", socket => {
           type: "ready-state",
           playerNumber: player.number,
           ready: false,
-          opponentReady: !!opponent.ready
+          opponentReady: !!player.ready
         });
       }
 
@@ -423,17 +447,6 @@ wss.on("connection", socket => {
 
     Combat events are relayed to the opponent.
     The server attaches the sender's player number.
-
-    Damage events can look like:
-    {
-      type: "game",
-      data: {
-        kind: "damage",
-        targetPlayerNumber: 2,
-        amount: 20,
-        attackType: "cleave"
-      }
-    }
     */
 
     if (message.type === "game") {
@@ -507,9 +520,14 @@ wss.on("connection", socket => {
     // Remove the disconnected player.
     room.players = room.players.filter(p => p.socket !== socket);
 
-    // Reset round-specific server state.
+    // Reset round-specific server state and let the remaining player ready up
+    // again. Keep their selected character, but don't leave them locked as ready.
     room.roundEndHandled = false;
     room.megumiPets = {};
+
+    for (const remaining of room.players) {
+      remaining.ready = false;
+    }
 
     // Tell the remaining player their opponent disconnected.
     broadcast(room, {
