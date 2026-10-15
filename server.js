@@ -5,17 +5,18 @@ const WebSocket = require("ws");
 const PORT = process.env.PORT || 3000;
 const rooms = new Map();
 
+// Keep these IDs in sync with the character IDs used by the client.
 const SHAPES = [
-  "circle",
-  "square",
-  "triangle",
-  "rhombus",
-  "star",
-  "pentagon",
-  "plus",
-  "x",
-  "octagon",
-  "trapezoid"
+  "circle",   // Gojo
+  "square",   // Choso
+  "triangle", // Naoya
+  "rhombus",  // Sukuna
+  "star",     // Megumi
+  "pentagon", // Hakari
+  "plus",     // Yuta
+  "x",        // Nobara
+  "octagon",  // Todo / Yuji
+  "trapezoid" // Jogo
 ];
 
 const PET_TYPES = [1, 2, 3];
@@ -64,12 +65,11 @@ function roomPlayerSummary(room, viewerNumber = null) {
 
     slots: [1, 2, 3, 4].map(number => {
       const p = room.players.find(x => x.number === number);
-      const teamId = teamForNumber(number);
 
       if (!p) {
         return {
           number,
-          teamId,
+          teamId: teamForNumber(number),
           relation: "empty",
           ready: false,
           selectedShape: null,
@@ -79,20 +79,21 @@ function roomPlayerSummary(room, viewerNumber = null) {
 
       let relation;
 
-      if (number === viewerNumber) {
-        relation = "you";
-      } else if (
-        room.mode === "2v2" &&
-        teamId === teamForNumber(viewerNumber)
-      ) {
+      if (room.mode === "2v2" && Number.isInteger(viewerNumber)) {
+        relation = number === viewerNumber
+          ? "you"
+          : teamForNumber(number) === teamForNumber(viewerNumber)
+            ? "teammates"
+            : "opponent";
+      } else if (room.mode === "2v2") {
         relation = "teammates";
       } else {
-        relation = room.mode === "2v2" ? "opponent" : "opponent";
+        relation = number === viewerNumber ? "you" : "opponent";
       }
 
       return {
         number,
-        teamId,
+        teamId: teamForNumber(number),
         relation,
         ready: !!p.ready,
         selectedShape: p.selectedShape,
@@ -160,135 +161,19 @@ function check2v2RoundEnd(room) {
     (p.state?.health ?? 100) > 0
   );
 
-  const team1Alive = teamAlive(1);
-  const team2Alive = teamAlive(2);
+  const one = teamAlive(1);
+  const two = teamAlive(2);
 
-  if (team1Alive && team2Alive) return;
+  if (one && two) return;
 
   room.roundEndHandled = true;
 
   broadcast(room, {
     type: "round-end",
-    winnerNumber: team1Alive ? 1 : 2,
-    winnerTeam: team1Alive ? 1 : 2,
+    winnerNumber: one ? 1 : 2,
+    winnerTeam: one ? 1 : 2,
     mode: "2v2"
   });
-}
-
-function startBotLoop(room) {
-  if (!room || room.botLoop) return;
-
-  room.botLoop = setInterval(() => {
-    if (
-      !rooms.has(room.id) ||
-      !room.matchStarted ||
-      room.mode !== "2v2" ||
-      !room.botFill
-    ) return;
-
-    const now = Date.now();
-
-    for (const bot of room.players.filter(p => !p.socket && p.isBot)) {
-      bot.state ||= {
-        ...defaultPosition(bot.number),
-        health: 100
-      };
-
-      if (bot.state.health <= 0) continue;
-
-      const enemies = room.players.filter(p =>
-        teamForNumber(p.number) !== bot.teamId &&
-        (p.state?.health ?? 100) > 0
-      );
-
-      if (!enemies.length) continue;
-
-      let target = enemies[0];
-      let targetState = target.state || {
-        ...defaultPosition(target.number),
-        health: 100
-      };
-      let bestDistance = Infinity;
-
-      for (const candidate of enemies) {
-        const state = candidate.state || {
-          ...defaultPosition(candidate.number),
-          health: 100
-        };
-
-        const distance = Math.hypot(
-          state.x - bot.state.x,
-          state.y - bot.state.y
-        );
-
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          target = candidate;
-          targetState = state;
-        }
-      }
-
-      const dx = targetState.x - bot.state.x;
-      const dy = targetState.y - bot.state.y;
-      const distance = Math.max(1, Math.hypot(dx, dy));
-
-      if (distance > 30) {
-        bot.state.x = Math.max(
-          24,
-          Math.min(936, bot.state.x + dx / distance * 2.1)
-        );
-
-        bot.state.y = Math.max(
-          24,
-          Math.min(576, bot.state.y + dy / distance * 2.1)
-        );
-      } else if (now - (bot.lastAttackAt || 0) >= 850) {
-        bot.lastAttackAt = now;
-
-        if (target.socket) {
-          send(target.socket, {
-            type: "bot-hit",
-            sourcePlayerNumber: bot.number,
-            targetPlayerNumber: target.number,
-            amount: 8,
-            teamId: bot.teamId
-          });
-        } else {
-          target.state ||= {
-            ...defaultPosition(target.number),
-            health: 100
-          };
-
-          target.state.health = Math.max(
-            0,
-            target.state.health - 8
-          );
-        }
-      }
-
-      bot.state.lastUpdated = now;
-    }
-
-    const states = room.players
-      .filter(bot => !bot.socket && bot.isBot)
-      .map(bot => ({
-        number: bot.number,
-        teamId: bot.teamId,
-        x: bot.state?.x ?? defaultPosition(bot.number).x,
-        y: bot.state?.y ?? defaultPosition(bot.number).y,
-        health: bot.state?.health ?? 100,
-        shape: bot.shape || chooseShape(bot)
-      }));
-
-    if (states.length) {
-      broadcast(room, {
-        type: "bot-state",
-        players: states
-      });
-    }
-
-    check2v2RoundEnd(room);
-  }, 100);
 }
 
 function startMatch(room) {
@@ -315,54 +200,52 @@ function startMatch(room) {
       return;
     }
 
-    if (
-      !SHAPES.includes(player.selectedShape) &&
-      player.selectedShape !== "random"
-    ) {
+    if (!SHAPES.includes(player.selectedShape) &&
+        player.selectedShape !== "random") {
       send(player.socket, {
         type: "error",
-        message: "Choose a supported character before starting."
+        message: `Your selected character (${player.selectedShape || "none"}) isn't supported by this server. Please select again.`
       });
-
       return;
     }
   }
 
   for (const player of room.players) {
-    player.teamId = teamForNumber(player.number);
     player.shape = chooseShape(player);
     player.state = {
       ...defaultPosition(player.number),
       health: 100
     };
     player.lastAttackAt = 0;
+    player.teamId = teamForNumber(player.number);
   }
 
   room.matchStarted = true;
   room.roundEndHandled = false;
+  room.botAuthorityNumber = botFill
+    ? Math.min(...humans.map(p => p.number))
+    : null;
 
   const players = required.map(number => {
     const player = room.players.find(p => p.number === number);
 
-    if (player) {
-      return {
-        number,
-        teamId: player.teamId,
-        relation: player.socket ? "player" : "bot",
-        shape: player.shape,
-        random: player.selectedShape === "random",
-        isBot: !player.socket
-      };
-    }
-
-    return {
-      number,
-      teamId: teamForNumber(number),
-      relation: "bot",
-      shape: randomFrom(SHAPES),
-      random: true,
-      isBot: true
-    };
+    return player
+      ? {
+          number,
+          teamId: player.teamId,
+          relation: player.socket ? player.relation : "bot",
+          shape: player.shape,
+          random: player.selectedShape === "random",
+          isBot: !player.socket
+        }
+      : {
+          number,
+          teamId: teamForNumber(number),
+          relation: "teammates",
+          shape: randomFrom(SHAPES),
+          random: true,
+          isBot: true
+        };
   });
 
   broadcast(room, {
@@ -377,10 +260,11 @@ function startMatch(room) {
       team1: [1, 3],
       team2: [2, 4]
     },
-    botFill
+    botFill,
+    botAuthorityNumber: room.botAuthorityNumber
   });
 
-  if (botFill) startBotLoop(room);
+  // The designated game client is responsible for running bot AI.
 }
 
 function resetForNextRound(room) {
@@ -402,9 +286,34 @@ function resetForNextRound(room) {
   }
 
   room.roundEndHandled = false;
-  room.matchStarted = false;
 
-  startMatch(room);
+  broadcast(room, {
+    type: "round-reset",
+    mode: room.mode || "1v1",
+    players: required.map(number => {
+      const p = room.players.find(x => x.number === number);
+
+      return p
+        ? {
+            number,
+            teamId: p.teamId,
+            shape: p.shape,
+            random: p.selectedShape === "random",
+            isBot: !p.socket
+          }
+        : {
+            number,
+            teamId: teamForNumber(number),
+            shape: randomFrom(SHAPES),
+            random: true,
+            isBot: true
+          };
+    }),
+    p1Shape: room.players.find(p => p.number === 1)?.shape,
+    p2Shape: room.players.find(p => p.number === 2)?.shape,
+    p1Random: room.players.find(p => p.number === 1)?.selectedShape === "random",
+    p2Random: room.players.find(p => p.number === 2)?.selectedShape === "random"
+  });
 }
 
 wss.on("connection", socket => {
@@ -429,8 +338,8 @@ wss.on("connection", socket => {
 
       if (!rooms.has(roomId)) {
         rooms.set(roomId, {
-          id: roomId,
           players: [],
+          id: roomId,
           mode: message.mode === "2v2" ? "2v2" : "1v1",
           botFill: false,
           matchStarted: false,
@@ -470,9 +379,9 @@ wss.on("connection", socket => {
       }
 
       const occupied = new Set(room.players.map(p => p.number));
-      const availableNumber = Array
-        .from({ length: capacity }, (_, i) => i + 1)
-        .find(number => !occupied.has(number));
+      const availableNumber = [1, 2, 3, 4]
+        .slice(0, capacity)
+        .find(n => !occupied.has(n));
 
       if (!availableNumber) {
         send(socket, { type: "room-full" });
@@ -483,11 +392,10 @@ wss.on("connection", socket => {
         socket,
         number: availableNumber,
         teamId: teamForNumber(availableNumber),
-        relation: "teammates",
+        relation: room.mode === "2v2" ? "teammates" : "opponent",
         ready: false,
         selectedShape: null,
-        shape: null,
-        state: null
+        shape: null
       };
 
       room.players.push(player);
@@ -497,7 +405,7 @@ wss.on("connection", socket => {
         ...roomPlayerSummary(room, player.number),
         playerNumber: player.number,
         teamId: player.teamId,
-        relation: "teammates",
+        relation: room.mode === "2v2" ? "teammates" : "opponent",
         teammateNumbers: room.mode === "2v2"
           ? teammateNumbers(player.number)
           : [],
@@ -535,9 +443,7 @@ wss.on("connection", socket => {
       room.botFill = true;
 
       for (const human of room.players.filter(p => p.socket)) {
-        if (!human.selectedShape) {
-          human.selectedShape = "random";
-        }
+        if (!human.selectedShape) human.selectedShape = "random";
         human.ready = true;
       }
 
@@ -551,8 +457,7 @@ wss.on("connection", socket => {
             ready: true,
             selectedShape: "random",
             shape: null,
-            isBot: true,
-            state: null
+            isBot: true
           });
         }
       }
@@ -562,8 +467,6 @@ wss.on("connection", socket => {
     }
 
     if (message.type === "select-position" && room.mode === "2v2") {
-      if (room.matchStarted || player.ready) return;
-
       const requested = Number(message.playerNumber);
 
       if (![1, 2, 3, 4].includes(requested)) return;
@@ -581,6 +484,7 @@ wss.on("connection", socket => {
       player.number = requested;
       player.teamId = teamForNumber(requested);
       player.relation = "teammates";
+      player.ready = false;
 
       send(socket, {
         type: "position-selected",
@@ -633,17 +537,26 @@ wss.on("connection", socket => {
 
       player.ready = true;
 
-      broadcast(room, {
-        type: "ready-state",
-        playerNumber: player.number,
-        ready: true,
-        teamId: player.teamId,
-        relation: "teammates",
-        ...roomPlayerSummary(room)
-      });
+      for (const recipient of room.players) {
+        if (!recipient.socket) continue;
 
-      sendLobbyState(room);
+        const other = room.players.find(p =>
+          p.socket && p !== recipient
+        );
+
+        send(recipient.socket, {
+          type: "ready-state",
+          playerNumber: player.number,
+          ready: true,
+          opponentReady: !!(other && other.ready),
+          teamId: player.teamId,
+          relation: room.mode === "2v2" ? "teammates" : "opponent",
+          ...roomPlayerSummary(room, recipient.number)
+        });
+      }
+
       startMatch(room);
+      sendLobbyState(room);
       return;
     }
 
@@ -652,14 +565,23 @@ wss.on("connection", socket => {
 
       player.ready = false;
 
-      broadcast(room, {
-        type: "ready-state",
-        playerNumber: player.number,
-        ready: false,
-        teamId: player.teamId,
-        relation: "teammates",
-        ...roomPlayerSummary(room)
-      });
+      for (const recipient of room.players) {
+        if (!recipient.socket) continue;
+
+        const other = room.players.find(p =>
+          p.socket && p !== recipient
+        );
+
+        send(recipient.socket, {
+          type: "ready-state",
+          playerNumber: player.number,
+          ready: false,
+          opponentReady: !!(other && other.ready),
+          teamId: player.teamId,
+          relation: room.mode === "2v2" ? "teammates" : "opponent",
+          ...roomPlayerSummary(room, recipient.number)
+        });
+      }
 
       sendLobbyState(room);
       return;
@@ -683,8 +605,6 @@ wss.on("connection", socket => {
     }
 
     if (message.type === "round-end") {
-      if (room.roundEndHandled) return;
-
       const winnerNumber = Number(message.winnerNumber);
 
       if (room.mode === "2v2") {
@@ -692,6 +612,8 @@ wss.on("connection", socket => {
       } else if (winnerNumber !== 1 && winnerNumber !== 2) {
         return;
       }
+
+      if (room.roundEndHandled) return;
 
       room.roundEndHandled = true;
 
@@ -708,11 +630,12 @@ wss.on("connection", socket => {
     }
 
     if (message.type === "next-round") {
-      if (!room.roundEndHandled) return;
+      const requiredCount = roomCapacity(room);
 
       if (
-        !room.botFill &&
-        room.players.filter(p => p.socket).length !== roomCapacity(room)
+        !room.roundEndHandled ||
+        (!room.botFill &&
+          room.players.filter(p => p.socket).length !== requiredCount)
       ) return;
 
       room.megumiPets = {};
@@ -728,6 +651,67 @@ wss.on("connection", socket => {
       if (!room.matchStarted) return;
 
       const gameData = { ...message.data };
+
+      if (
+        gameData.kind === "bot-state" &&
+        room.mode === "2v2" &&
+        room.botFill
+      ) {
+        if (
+          player.number !== room.botAuthorityNumber ||
+          !Array.isArray(gameData.players)
+        ) return;
+
+        const validBots = [];
+
+        for (const state of gameData.players) {
+          const number = Number(state.number);
+          const bot = room.players.find(p =>
+            p.number === number && !p.socket && p.isBot
+          );
+
+          if (
+            !bot ||
+            !Number.isFinite(state.x) ||
+            !Number.isFinite(state.y) ||
+            !Number.isFinite(state.health)
+          ) continue;
+
+          bot.state ||= {
+            ...defaultPosition(number),
+            health: 100
+          };
+
+          bot.state.x = Math.max(0, Math.min(960, state.x));
+          bot.state.y = Math.max(0, Math.min(600, state.y));
+          bot.state.health = Math.max(0, Math.min(500, state.health));
+
+          if (SHAPES.includes(state.shape)) {
+            bot.shape = state.shape;
+          }
+
+          validBots.push({
+            number,
+            teamId: bot.teamId,
+            x: bot.state.x,
+            y: bot.state.y,
+            health: bot.state.health,
+            maxHealth: state.maxHealth,
+            shape: bot.shape,
+            isBot: true
+          });
+        }
+
+        if (validBots.length) {
+          broadcast(room, {
+            type: "bot-state",
+            players: validBots
+          }, socket);
+        }
+
+        check2v2RoundEnd(room);
+        return;
+      }
 
       if (
         gameData.kind === "state" &&
@@ -753,16 +737,6 @@ wss.on("connection", socket => {
         const targetPlayerNumber = Number(gameData.targetPlayerNumber);
 
         if (![1, 2, 3, 4].includes(targetPlayerNumber)) return;
-        if (targetPlayerNumber === player.number) return;
-
-        if (
-          room.mode === "2v2" &&
-          teamForNumber(targetPlayerNumber) === player.teamId
-        ) return;
-
-        const amount = Number(gameData.amount);
-
-        if (!Number.isFinite(amount) || amount <= 0) return;
 
         const targetPlayer = room.players.find(p =>
           p.number === targetPlayerNumber
@@ -770,14 +744,58 @@ wss.on("connection", socket => {
 
         if (!targetPlayer) return;
 
+        const sourceNumber = Number(
+          gameData.sourcePlayerNumber || player.number
+        );
+
+        let sourceTeam = player.teamId;
+
+        if (sourceNumber !== player.number) {
+          const source = room.players.find(p =>
+            p.number === sourceNumber
+          );
+
+          if (!(
+            room.mode === "2v2" &&
+            room.botFill &&
+            player.number === room.botAuthorityNumber &&
+            source &&
+            !source.socket &&
+            source.isBot
+          )) return;
+
+          sourceTeam = source.teamId;
+        }
+
+        if (targetPlayerNumber === sourceNumber) return;
+
+        if (
+          room.mode === "2v2" &&
+          teamForNumber(targetPlayerNumber) === sourceTeam
+        ) return;
+
+        const amount = Number(gameData.amount);
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+          return;
+        }
+
         gameData.amount = amount;
         gameData.targetPlayerNumber = targetPlayerNumber;
 
-        if (room.mode === "2v2" && !targetPlayer.socket && targetPlayer.isBot) {
+        if (
+          room.mode === "2v2" &&
+          !targetPlayer.socket &&
+          targetPlayer.isBot
+        ) {
           targetPlayer.state ||= {
             ...defaultPosition(targetPlayerNumber),
             health: 100
           };
+
+          if (sourceNumber !== player.number) {
+            return;
+          }
 
           targetPlayer.state.health = Math.max(
             0,
@@ -805,7 +823,7 @@ wss.on("connection", socket => {
         type: "game",
         playerNumber: player.number,
         teamId: player.teamId,
-        relation: "teammates",
+        relation: room.mode === "2v2" ? "teammates" : "opponent",
         data: gameData
       }, socket);
 
@@ -841,7 +859,6 @@ wss.on("connection", socket => {
     sendLobbyState(room);
 
     if (!room.players.some(p => p.socket)) {
-      if (room.botLoop) clearInterval(room.botLoop);
       rooms.delete(roomId);
     }
   });
