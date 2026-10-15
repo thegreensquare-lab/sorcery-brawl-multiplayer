@@ -5,28 +5,20 @@ const WebSocket = require("ws");
 const PORT = process.env.PORT || 3000;
 const rooms = new Map();
 
-// Keep these IDs in sync with the character IDs used by the client.
-// Random includes every supported character, including Todo/Yuji.
 const SHAPES = [
-  "circle",   // Gojo
-  "square",   // Choso
-  "triangle", // Naoya
-  "rhombus",  // Sukuna
-  "star",     // Megumi
-  "pentagon", // Hakari
-  "plus",     // Yuta
-  "x",        // Nobara
-  "octagon",  // Todo / Yuji
-  "trapezoid" // Jogo
+  "circle",
+  "square",
+  "triangle",
+  "rhombus",
+  "star",
+  "pentagon",
+  "plus",
+  "x",
+  "octagon",
+  "trapezoid"
 ];
 
 const PET_TYPES = [1, 2, 3];
-
-/*
-====================================================
-UTILITY FUNCTIONS
-====================================================
-*/
 
 function randomFrom(list) {
   return list[Math.floor(Math.random() * list.length)];
@@ -47,11 +39,81 @@ function broadcast(room, message, except = null) {
   }
 }
 
-/*
-====================================================
-HTTP SERVER
-====================================================
-*/
+function teamForNumber(number) {
+  return number === 1 || number === 3 ? 1 : 2;
+}
+
+function teammateNumbers(number) {
+  return number === 1 ? [3] :
+    number === 3 ? [1] :
+    number === 2 ? [4] : [2];
+}
+
+function roomCapacity(room) {
+  return room && room.mode === "2v2" ? 4 : 2;
+}
+
+function roomPlayerSummary(room, viewerNumber = null) {
+  const humans = room.players.filter(p => p.socket);
+
+  return {
+    mode: room.mode || "1v1",
+    players: humans.length,
+    capacity: roomCapacity(room),
+    ready: humans.filter(p => p.ready).length,
+
+    slots: [1, 2, 3, 4].map(number => {
+      const p = room.players.find(x => x.number === number);
+      const teamId = teamForNumber(number);
+
+      if (!p) {
+        return {
+          number,
+          teamId,
+          relation: "empty",
+          ready: false,
+          selectedShape: null,
+          isBot: false
+        };
+      }
+
+      let relation;
+
+      if (number === viewerNumber) {
+        relation = "you";
+      } else if (
+        room.mode === "2v2" &&
+        teamId === teamForNumber(viewerNumber)
+      ) {
+        relation = "teammates";
+      } else {
+        relation = room.mode === "2v2" ? "opponent" : "opponent";
+      }
+
+      return {
+        number,
+        teamId,
+        relation,
+        ready: !!p.ready,
+        selectedShape: p.selectedShape,
+        isBot: !p.socket
+      };
+    })
+  };
+}
+
+function sendLobbyState(room) {
+  if (!room) return;
+
+  for (const player of room.players) {
+    if (!player.socket) continue;
+
+    send(player.socket, {
+      type: "lobby-state",
+      ...roomPlayerSummary(room, player.number)
+    });
+  }
+}
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, {
@@ -61,25 +123,12 @@ const server = http.createServer((req, res) => {
   res.end("Sorcery Brawl multiplayer server is online!");
 });
 
-/*
-====================================================
-WEBSOCKET SERVER
-====================================================
-*/
-
 const wss = new WebSocket.Server({ server });
-
-/*
-====================================================
-CHARACTER SELECTION
-====================================================
-*/
 
 function chooseShape(player) {
   if (!player || !player.selectedShape) return null;
 
   if (player.selectedShape === "random") {
-    // Avoid repeating the same character in consecutive rounds.
     const choices = SHAPES.filter(shape => shape !== player.shape);
     return randomFrom(choices.length ? choices : SHAPES);
   }
@@ -89,98 +138,274 @@ function chooseShape(player) {
     : null;
 }
 
-/*
-====================================================
-START MATCH
-====================================================
-*/
+function defaultPosition(number) {
+  const team = teamForNumber(number);
+
+  return {
+    x: team === 1 ? 150 : 810,
+    y: number === 1 || number === 2 ? 190 : 410
+  };
+}
+
+function check2v2RoundEnd(room) {
+  if (
+    !room ||
+    room.mode !== "2v2" ||
+    !room.matchStarted ||
+    room.roundEndHandled
+  ) return;
+
+  const teamAlive = team => room.players.some(p =>
+    p.teamId === team &&
+    (p.state?.health ?? 100) > 0
+  );
+
+  const team1Alive = teamAlive(1);
+  const team2Alive = teamAlive(2);
+
+  if (team1Alive && team2Alive) return;
+
+  room.roundEndHandled = true;
+
+  broadcast(room, {
+    type: "round-end",
+    winnerNumber: team1Alive ? 1 : 2,
+    winnerTeam: team1Alive ? 1 : 2,
+    mode: "2v2"
+  });
+}
+
+function startBotLoop(room) {
+  if (!room || room.botLoop) return;
+
+  room.botLoop = setInterval(() => {
+    if (
+      !rooms.has(room.id) ||
+      !room.matchStarted ||
+      room.mode !== "2v2" ||
+      !room.botFill
+    ) return;
+
+    const now = Date.now();
+
+    for (const bot of room.players.filter(p => !p.socket && p.isBot)) {
+      bot.state ||= {
+        ...defaultPosition(bot.number),
+        health: 100
+      };
+
+      if (bot.state.health <= 0) continue;
+
+      const enemies = room.players.filter(p =>
+        teamForNumber(p.number) !== bot.teamId &&
+        (p.state?.health ?? 100) > 0
+      );
+
+      if (!enemies.length) continue;
+
+      let target = enemies[0];
+      let targetState = target.state || {
+        ...defaultPosition(target.number),
+        health: 100
+      };
+      let bestDistance = Infinity;
+
+      for (const candidate of enemies) {
+        const state = candidate.state || {
+          ...defaultPosition(candidate.number),
+          health: 100
+        };
+
+        const distance = Math.hypot(
+          state.x - bot.state.x,
+          state.y - bot.state.y
+        );
+
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          target = candidate;
+          targetState = state;
+        }
+      }
+
+      const dx = targetState.x - bot.state.x;
+      const dy = targetState.y - bot.state.y;
+      const distance = Math.max(1, Math.hypot(dx, dy));
+
+      if (distance > 30) {
+        bot.state.x = Math.max(
+          24,
+          Math.min(936, bot.state.x + dx / distance * 2.1)
+        );
+
+        bot.state.y = Math.max(
+          24,
+          Math.min(576, bot.state.y + dy / distance * 2.1)
+        );
+      } else if (now - (bot.lastAttackAt || 0) >= 850) {
+        bot.lastAttackAt = now;
+
+        if (target.socket) {
+          send(target.socket, {
+            type: "bot-hit",
+            sourcePlayerNumber: bot.number,
+            targetPlayerNumber: target.number,
+            amount: 8,
+            teamId: bot.teamId
+          });
+        } else {
+          target.state ||= {
+            ...defaultPosition(target.number),
+            health: 100
+          };
+
+          target.state.health = Math.max(
+            0,
+            target.state.health - 8
+          );
+        }
+      }
+
+      bot.state.lastUpdated = now;
+    }
+
+    const states = room.players
+      .filter(bot => !bot.socket && bot.isBot)
+      .map(bot => ({
+        number: bot.number,
+        teamId: bot.teamId,
+        x: bot.state?.x ?? defaultPosition(bot.number).x,
+        y: bot.state?.y ?? defaultPosition(bot.number).y,
+        health: bot.state?.health ?? 100,
+        shape: bot.shape || chooseShape(bot)
+      }));
+
+    if (states.length) {
+      broadcast(room, {
+        type: "bot-state",
+        players: states
+      });
+    }
+
+    check2v2RoundEnd(room);
+  }, 100);
+}
 
 function startMatch(room) {
-  if (!room || room.players.length !== 2) return;
+  if (!room) return;
 
-  if (!room.players.every(player => player.ready)) return;
+  const capacity = roomCapacity(room);
+  const humans = room.players.filter(p => p.socket);
+  const botFill = room.mode === "2v2" && room.botFill === true;
 
-  // Make sure both players selected a valid character.
-  const invalidPlayer = room.players.find(player =>
-    !SHAPES.includes(player.selectedShape) &&
-    player.selectedShape !== "random"
-  );
+  if ((!botFill && humans.length !== capacity) ||
+      (botFill && humans.length < 1)) return;
 
-  if (invalidPlayer) {
-    console.warn(
-      `[${[...rooms.entries()].find(([, value]) => value === room)?.[0] || "room"}] ` +
-      `Cannot start: Player ${invalidPlayer.number} has unsupported selection ` +
-      `${JSON.stringify(invalidPlayer.selectedShape)}`
-    );
+  if (!humans.every(player => player.ready)) return;
 
-    send(invalidPlayer.socket, {
-      type: "error",
-      message: `Your selected character (${invalidPlayer.selectedShape || "none"}) isn't supported by this server. Please select again.`
-    });
+  const required = room.mode === "2v2"
+    ? [1, 2, 3, 4]
+    : [1, 2];
 
-    return;
+  for (const number of required) {
+    const player = room.players.find(p => p.number === number);
+
+    if (!player) {
+      if (botFill) continue;
+      return;
+    }
+
+    if (
+      !SHAPES.includes(player.selectedShape) &&
+      player.selectedShape !== "random"
+    ) {
+      send(player.socket, {
+        type: "error",
+        message: "Choose a supported character before starting."
+      });
+
+      return;
+    }
   }
 
-  const p1 = room.players.find(player => player.number === 1);
-  const p2 = room.players.find(player => player.number === 2);
+  for (const player of room.players) {
+    player.teamId = teamForNumber(player.number);
+    player.shape = chooseShape(player);
+    player.state = {
+      ...defaultPosition(player.number),
+      health: 100
+    };
+    player.lastAttackAt = 0;
+  }
 
-  if (!p1 || !p2) return;
-
-  // Resolve Random once on the server so both clients agree.
-  p1.shape = chooseShape(p1);
-  p2.shape = chooseShape(p2);
-
+  room.matchStarted = true;
   room.roundEndHandled = false;
 
-  console.log(
-    `Starting match: P1=${p1.shape} (selected ${p1.selectedShape}), ` +
-    `P2=${p2.shape} (selected ${p2.selectedShape})`
-  );
+  const players = required.map(number => {
+    const player = room.players.find(p => p.number === number);
+
+    if (player) {
+      return {
+        number,
+        teamId: player.teamId,
+        relation: player.socket ? "player" : "bot",
+        shape: player.shape,
+        random: player.selectedShape === "random",
+        isBot: !player.socket
+      };
+    }
+
+    return {
+      number,
+      teamId: teamForNumber(number),
+      relation: "bot",
+      shape: randomFrom(SHAPES),
+      random: true,
+      isBot: true
+    };
+  });
 
   broadcast(room, {
     type: "match-start",
-    p1Shape: p1.shape,
-    p2Shape: p2.shape,
-    p1Random: p1.selectedShape === "random",
-    p2Random: p2.selectedShape === "random"
+    mode: room.mode || "1v1",
+    players,
+    p1Shape: players[0]?.shape,
+    p2Shape: players[1]?.shape,
+    p1Random: !!players[0]?.random,
+    p2Random: !!players[1]?.random,
+    teams: {
+      team1: [1, 3],
+      team2: [2, 4]
+    },
+    botFill
   });
-}
 
-/*
-====================================================
-RESET FOR NEXT ROUND
-====================================================
-*/
+  if (botFill) startBotLoop(room);
+}
 
 function resetForNextRound(room) {
-  if (!room || room.players.length !== 2) return;
+  if (!room) return;
 
-  const p1 = room.players.find(player => player.number === 1);
-  const p2 = room.players.find(player => player.number === 2);
+  const required = room.mode === "2v2"
+    ? [1, 2, 3, 4]
+    : [1, 2];
 
-  if (!p1 || !p2) return;
+  if (
+    required.some(number =>
+      !room.players.some(p => p.number === number)
+    ) &&
+    !room.botFill
+  ) return;
 
-  // Players who chose Random get a new character.
-  // Players who chose a specific character keep it.
-  p1.shape = chooseShape(p1);
-  p2.shape = chooseShape(p2);
+  for (const player of room.players) {
+    player.shape = chooseShape(player);
+  }
 
   room.roundEndHandled = false;
+  room.matchStarted = false;
 
-  broadcast(room, {
-    type: "round-reset",
-    p1Shape: p1.shape,
-    p2Shape: p2.shape,
-    p1Random: p1.selectedShape === "random",
-    p2Random: p2.selectedShape === "random"
-  });
+  startMatch(room);
 }
-
-/*
-====================================================
-WEBSOCKET CONNECTION
-====================================================
-*/
 
 wss.on("connection", socket => {
   let roomId = null;
@@ -189,7 +414,6 @@ wss.on("connection", socket => {
   socket.on("message", raw => {
     let message;
 
-    // Safely parse incoming JSON.
     try {
       message = JSON.parse(raw.toString());
     } catch {
@@ -198,98 +422,190 @@ wss.on("connection", socket => {
 
     if (!message || typeof message !== "object") return;
 
-    /*
-    ==================================================
-    JOIN ROOM
-    ==================================================
-    */
-
     if (message.type === "join") {
       roomId = String(message.room || "").trim();
 
       if (!roomId) return;
 
-      // Create room if it doesn't exist.
       if (!rooms.has(roomId)) {
         rooms.set(roomId, {
+          id: roomId,
           players: [],
+          mode: message.mode === "2v2" ? "2v2" : "1v1",
+          botFill: false,
+          matchStarted: false,
           roundEndHandled: false,
           megumiPets: {}
         });
       }
 
       const room = rooms.get(roomId);
+      const requestedMode = message.mode === "2v2" ? "2v2" : "1v1";
 
-      // Only two players are allowed.
-      if (room.players.length >= 2) {
+      if (room.players.length === 0) {
+        room.mode = requestedMode;
+      }
+
+      if (room.mode !== requestedMode) {
+        send(socket, {
+          type: "error",
+          message: "This room was created for a different game mode."
+        });
+        return;
+      }
+
+      if (room.matchStarted) {
+        send(socket, {
+          type: "error",
+          message: "This match has already started."
+        });
+        return;
+      }
+
+      const capacity = roomCapacity(room);
+
+      if (room.players.filter(p => p.socket).length >= capacity) {
         send(socket, { type: "room-full" });
         return;
       }
 
-      // Assign whichever player number is actually free.
-      // This prevents duplicate player numbers after a disconnect.
-      const availableNumber = room.players.some(p => p.number === 1)
-        ? 2
-        : 1;
+      const occupied = new Set(room.players.map(p => p.number));
+      const availableNumber = Array
+        .from({ length: capacity }, (_, i) => i + 1)
+        .find(number => !occupied.has(number));
+
+      if (!availableNumber) {
+        send(socket, { type: "room-full" });
+        return;
+      }
 
       player = {
         socket,
         number: availableNumber,
+        teamId: teamForNumber(availableNumber),
+        relation: "teammates",
         ready: false,
         selectedShape: null,
-        shape: null
+        shape: null,
+        state: null
       };
 
       room.players.push(player);
 
       send(socket, {
         type: "joined",
-        players: room.players.length,
-        playerNumber: player.number
+        ...roomPlayerSummary(room, player.number),
+        playerNumber: player.number,
+        teamId: player.teamId,
+        relation: "teammates",
+        teammateNumbers: room.mode === "2v2"
+          ? teammateNumbers(player.number)
+          : [],
+        teams: {
+          team1: [1, 3],
+          team2: [2, 4]
+        }
       });
 
-      // Tell Player 1 when Player 2 joins.
-      if (room.players.length === 2) {
-        broadcast(
-          room,
-          {
-            type: "player-joined",
-            players: 2
-          },
-          socket
-        );
-      }
+      broadcast(room, {
+        type: "player-joined",
+        ...roomPlayerSummary(room)
+      }, socket);
 
+      sendLobbyState(room);
       return;
     }
-
-    /*
-    ==================================================
-    REQUIRE PLAYER TO BE IN A ROOM
-    ==================================================
-    */
 
     if (!player || !roomId) return;
 
     const room = rooms.get(roomId);
     if (!room) return;
 
-    /*
-    ==================================================
-    CHARACTER SELECTION
-    ==================================================
-    */
+    if (message.type === "start-with-bots" && room.mode === "2v2") {
+      if (room.matchStarted) return;
 
-    if (message.type === "select-character") {
-      const shape = String(message.shape || "").toLowerCase();
-
-      // Only allow supported characters or Random.
-      if (!SHAPES.includes(shape) && shape !== "random") {
+      if (!player.selectedShape) {
+        send(socket, {
+          type: "error",
+          message: "Choose a character before starting with bots."
+        });
         return;
       }
 
-      // Don't allow changing character after Ready.
-      if (player.ready) return;
+      room.botFill = true;
+
+      for (const human of room.players.filter(p => p.socket)) {
+        if (!human.selectedShape) {
+          human.selectedShape = "random";
+        }
+        human.ready = true;
+      }
+
+      for (const number of [1, 2, 3, 4]) {
+        if (!room.players.some(p => p.number === number)) {
+          room.players.push({
+            socket: null,
+            number,
+            teamId: teamForNumber(number),
+            relation: "teammates",
+            ready: true,
+            selectedShape: "random",
+            shape: null,
+            isBot: true,
+            state: null
+          });
+        }
+      }
+
+      startMatch(room);
+      return;
+    }
+
+    if (message.type === "select-position" && room.mode === "2v2") {
+      if (room.matchStarted || player.ready) return;
+
+      const requested = Number(message.playerNumber);
+
+      if (![1, 2, 3, 4].includes(requested)) return;
+
+      if (room.players.some(p =>
+        p !== player && p.number === requested
+      )) {
+        send(socket, {
+          type: "position-taken",
+          playerNumber: requested
+        });
+        return;
+      }
+
+      player.number = requested;
+      player.teamId = teamForNumber(requested);
+      player.relation = "teammates";
+
+      send(socket, {
+        type: "position-selected",
+        playerNumber: requested,
+        teamId: player.teamId,
+        relation: "teammates",
+        teammateNumbers: teammateNumbers(requested)
+      });
+
+      sendLobbyState(room);
+      return;
+    }
+
+    if (message.type === "select-character") {
+      if (room.matchStarted || player.ready) return;
+
+      const shape = String(message.shape || "").toLowerCase();
+
+      if (!SHAPES.includes(shape) && shape !== "random") {
+        send(socket, {
+          type: "error",
+          message: "Unsupported character selection."
+        });
+        return;
+      }
 
       player.selectedShape = shape;
       player.shape = null;
@@ -300,16 +616,13 @@ wss.on("connection", socket => {
         shape
       });
 
+      sendLobbyState(room);
       return;
     }
 
-    /*
-    ==================================================
-    READY
-    ==================================================
-    */
-
     if (message.type === "ready") {
+      if (room.matchStarted) return;
+
       if (!player.selectedShape) {
         send(socket, {
           type: "error",
@@ -320,74 +633,46 @@ wss.on("connection", socket => {
 
       player.ready = true;
 
-      const opponent = room.players.find(p => p !== player);
-
-      send(socket, {
+      broadcast(room, {
         type: "ready-state",
         playerNumber: player.number,
         ready: true,
-        opponentReady: !!(opponent && opponent.ready)
+        teamId: player.teamId,
+        relation: "teammates",
+        ...roomPlayerSummary(room)
       });
 
-      if (opponent) {
-        send(opponent.socket, {
-          type: "ready-state",
-          playerNumber: player.number,
-          ready: true,
-          opponentReady: true
-        });
-      }
-
+      sendLobbyState(room);
       startMatch(room);
       return;
     }
 
-    /*
-    ==================================================
-    CANCEL READY
-    ==================================================
-    */
-
     if (message.type === "cancel-ready") {
+      if (room.matchStarted) return;
+
       player.ready = false;
 
-      send(socket, {
+      broadcast(room, {
         type: "ready-state",
         playerNumber: player.number,
         ready: false,
-        opponentReady: false
+        teamId: player.teamId,
+        relation: "teammates",
+        ...roomPlayerSummary(room)
       });
 
-      const opponent = room.players.find(p => p !== player);
-
-      if (opponent) {
-        send(opponent.socket, {
-          type: "ready-state",
-          playerNumber: player.number,
-          ready: false,
-          opponentReady: !!player.ready
-        });
-      }
-
+      sendLobbyState(room);
       return;
     }
-
-    /*
-    ==================================================
-    MEGUMI SHIKIGAMI
-    ==================================================
-    */
 
     if (message.type === "megumi-pet-request") {
       const targetNumber = Number(message.playerNumber);
 
-      // A player can only request a Shikigami for themselves.
       if (targetNumber !== player.number) return;
 
       const petType = randomFrom(PET_TYPES);
       room.megumiPets[targetNumber] = petType;
 
-      // Send the same random result to both computers.
       broadcast(room, {
         type: "megumi-pet-type",
         playerNumber: targetNumber,
@@ -397,119 +682,140 @@ wss.on("connection", socket => {
       return;
     }
 
-    /*
-    ==================================================
-    ROUND END
-    ==================================================
-    */
-
     if (message.type === "round-end") {
+      if (room.roundEndHandled) return;
+
       const winnerNumber = Number(message.winnerNumber);
 
-      // Only Player 1 or Player 2 can win.
-      if (winnerNumber !== 1 && winnerNumber !== 2) return;
-
-      // Prevent the same round ending more than once.
-      if (room.roundEndHandled) return;
+      if (room.mode === "2v2") {
+        if (![1, 2, 3, 4].includes(winnerNumber)) return;
+      } else if (winnerNumber !== 1 && winnerNumber !== 2) {
+        return;
+      }
 
       room.roundEndHandled = true;
 
       broadcast(room, {
         type: "round-end",
-        winnerNumber
+        winnerNumber,
+        winnerTeam: room.mode === "2v2"
+          ? teamForNumber(winnerNumber)
+          : winnerNumber,
+        mode: room.mode || "1v1"
       });
 
       return;
     }
 
-    /*
-    ==================================================
-    NEXT ROUND
-    ==================================================
-    */
-
     if (message.type === "next-round") {
-      if (!room.roundEndHandled || room.players.length !== 2) {
-        return;
-      }
+      if (!room.roundEndHandled) return;
 
-      // Clear old Megumi selections for the next round.
+      if (
+        !room.botFill &&
+        room.players.filter(p => p.socket).length !== roomCapacity(room)
+      ) return;
+
       room.megumiPets = {};
-
       resetForNextRound(room);
       return;
     }
-
-    /*
-    ==================================================
-    GAME EVENT RELAY
-    ==================================================
-
-    Combat events are relayed to the opponent.
-    The server attaches the sender's player number.
-    */
 
     if (message.type === "game") {
       if (!message.data || typeof message.data !== "object") {
         return;
       }
 
+      if (!room.matchStarted) return;
+
       const gameData = { ...message.data };
 
-      // Validate player damage events.
-      if (gameData.kind === "damage") {
-        const targetPlayerNumber = Number(
-          gameData.targetPlayerNumber
-        );
+      if (
+        gameData.kind === "state" &&
+        Number.isFinite(gameData.x) &&
+        Number.isFinite(gameData.y)
+      ) {
+        player.state ||= {
+          ...defaultPosition(player.number),
+          health: 100
+        };
 
-        if (targetPlayerNumber !== 1 && targetPlayerNumber !== 2) {
-          return;
+        player.state.x = Math.max(0, Math.min(960, gameData.x));
+        player.state.y = Math.max(0, Math.min(600, gameData.y));
+
+        if (Number.isFinite(gameData.health)) {
+          player.state.health = Math.max(0, gameData.health);
         }
 
-        // Prevent a player from sending damage to themselves.
+        check2v2RoundEnd(room);
+      }
+
+      if (gameData.kind === "damage") {
+        const targetPlayerNumber = Number(gameData.targetPlayerNumber);
+
+        if (![1, 2, 3, 4].includes(targetPlayerNumber)) return;
         if (targetPlayerNumber === player.number) return;
+
+        if (
+          room.mode === "2v2" &&
+          teamForNumber(targetPlayerNumber) === player.teamId
+        ) return;
 
         const amount = Number(gameData.amount);
 
-        if (!Number.isFinite(amount) || amount <= 0) {
-          return;
-        }
+        if (!Number.isFinite(amount) || amount <= 0) return;
+
+        const targetPlayer = room.players.find(p =>
+          p.number === targetPlayerNumber
+        );
+
+        if (!targetPlayer) return;
 
         gameData.amount = amount;
         gameData.targetPlayerNumber = targetPlayerNumber;
+
+        if (room.mode === "2v2" && !targetPlayer.socket && targetPlayer.isBot) {
+          targetPlayer.state ||= {
+            ...defaultPosition(targetPlayerNumber),
+            health: 100
+          };
+
+          targetPlayer.state.health = Math.max(
+            0,
+            targetPlayer.state.health - amount
+          );
+
+          broadcast(room, {
+            type: "bot-state",
+            players: [{
+              number: targetPlayer.number,
+              teamId: targetPlayer.teamId,
+              x: targetPlayer.state.x,
+              y: targetPlayer.state.y,
+              health: targetPlayer.state.health,
+              shape: targetPlayer.shape
+            }]
+          });
+
+          check2v2RoundEnd(room);
+          return;
+        }
       }
 
-      // Send this event to the opponent, not back to the sender.
-      broadcast(
-        room,
-        {
-          type: "game",
-          playerNumber: player.number,
-          data: gameData
-        },
-        socket
-      );
+      broadcast(room, {
+        type: "game",
+        playerNumber: player.number,
+        teamId: player.teamId,
+        relation: "teammates",
+        data: gameData
+      }, socket);
 
       return;
     }
-
-    /*
-    ==================================================
-    PING
-    ==================================================
-    */
 
     if (message.type === "ping") {
       send(socket, { type: "pong" });
-      return;
     }
   });
-
-  /*
-  ==================================================
-  PLAYER DISCONNECT
-  ==================================================
-  */
 
   socket.on("close", () => {
     if (!roomId) return;
@@ -517,35 +823,29 @@ wss.on("connection", socket => {
     const room = rooms.get(roomId);
     if (!room) return;
 
-    // Remove the disconnected player.
     room.players = room.players.filter(p => p.socket !== socket);
-
-    // Reset round-specific server state and let the remaining player ready up
-    // again. Keep their selected character, but don't leave them locked as ready.
     room.roundEndHandled = false;
+    room.matchStarted = false;
     room.megumiPets = {};
 
     for (const remaining of room.players) {
       remaining.ready = false;
     }
 
-    // Tell the remaining player their opponent disconnected.
     broadcast(room, {
-      type: "player-left"
+      type: "player-left",
+      playerNumber: player ? player.number : null,
+      ...roomPlayerSummary(room)
     });
 
-    // Delete empty rooms.
-    if (room.players.length === 0) {
+    sendLobbyState(room);
+
+    if (!room.players.some(p => p.socket)) {
+      if (room.botLoop) clearInterval(room.botLoop);
       rooms.delete(roomId);
     }
   });
 });
-
-/*
-====================================================
-START SERVER
-====================================================
-*/
 
 server.listen(PORT, () => {
   console.log(`Sorcery Brawl server running on port ${PORT}`);
