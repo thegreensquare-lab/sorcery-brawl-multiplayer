@@ -1,4 +1,3 @@
-
 const http = require("http");
 const WebSocket = require("ws");
 
@@ -6,6 +5,7 @@ const PORT = process.env.PORT || 3000;
 const rooms = new Map();
 
 // Keep these IDs in sync with the character IDs used by the client.
+// Random includes every supported character, including Todo/Yuji.
 const SHAPES = [
   "circle",   // Gojo
   "square",   // Choso
@@ -20,6 +20,12 @@ const SHAPES = [
 ];
 
 const PET_TYPES = [1, 2, 3];
+
+/*
+====================================================
+UTILITY FUNCTIONS
+====================================================
+*/
 
 function randomFrom(list) {
   return list[Math.floor(Math.random() * list.length)];
@@ -46,8 +52,8 @@ function teamForNumber(number) {
 
 function teammateNumbers(number) {
   return number === 1 ? [3] :
-    number === 3 ? [1] :
-    number === 2 ? [4] : [2];
+         number === 3 ? [1] :
+         number === 2 ? [4] : [2];
 }
 
 function roomCapacity(room) {
@@ -82,9 +88,11 @@ function roomPlayerSummary(room, viewerNumber = null) {
       if (room.mode === "2v2" && Number.isInteger(viewerNumber)) {
         relation = number === viewerNumber
           ? "you"
-          : teamForNumber(number) === teamForNumber(viewerNumber)
-            ? "teammates"
-            : "opponent";
+          : (
+              teamForNumber(number) === teamForNumber(viewerNumber)
+                ? "teammates"
+                : "opponent"
+            );
       } else if (room.mode === "2v2") {
         relation = "teammates";
       } else {
@@ -116,6 +124,12 @@ function sendLobbyState(room) {
   }
 }
 
+/*
+====================================================
+HTTP SERVER
+====================================================
+*/
+
 const server = http.createServer((req, res) => {
   res.writeHead(200, {
     "Content-Type": "text/plain"
@@ -124,13 +138,27 @@ const server = http.createServer((req, res) => {
   res.end("Sorcery Brawl multiplayer server is online!");
 });
 
+/*
+====================================================
+WEBSOCKET SERVER
+====================================================
+*/
+
 const wss = new WebSocket.Server({ server });
+
+/*
+====================================================
+CHARACTER SELECTION
+====================================================
+*/
 
 function chooseShape(player) {
   if (!player || !player.selectedShape) return null;
 
   if (player.selectedShape === "random") {
+    // Avoid repeating the same character in consecutive rounds.
     const choices = SHAPES.filter(shape => shape !== player.shape);
+
     return randomFrom(choices.length ? choices : SHAPES);
   }
 
@@ -144,7 +172,7 @@ function defaultPosition(number) {
 
   return {
     x: team === 1 ? 150 : 810,
-    y: number === 1 || number === 2 ? 190 : 410
+    y: (number === 1 || number === 2) ? 190 : 410
   };
 }
 
@@ -154,12 +182,14 @@ function check2v2RoundEnd(room) {
     room.mode !== "2v2" ||
     !room.matchStarted ||
     room.roundEndHandled
-  ) return;
+  ) {
+    return;
+  }
 
-  const teamAlive = team => room.players.some(p =>
-    p.teamId === team &&
-    (p.state?.health ?? 100) > 0
-  );
+  const teamAlive = team =>
+    room.players.some(
+      p => p.teamId === team && (p.state?.health ?? 100) > 0
+    );
 
   const one = teamAlive(1);
   const two = teamAlive(2);
@@ -176,6 +206,130 @@ function check2v2RoundEnd(room) {
   });
 }
 
+function startBotLoop(room) {
+  if (!room || room.botLoop) return;
+
+  room.botLoop = setInterval(() => {
+    if (
+      !rooms.has(room.id) ||
+      !room.matchStarted ||
+      room.mode !== "2v2" ||
+      !room.botFill
+    ) {
+      return;
+    }
+
+    const now = Date.now();
+
+    for (const bot of room.players.filter(p => !p.socket && p.isBot)) {
+      bot.state ||= {
+        ...defaultPosition(bot.number),
+        health: 100
+      };
+
+      if (bot.state.health <= 0) continue;
+
+      const enemies = room.players.filter(p =>
+        p.number !== bot.number &&
+        teamForNumber(p.number) !== bot.teamId &&
+        (p.state || defaultPosition(p.number)).health !== 0
+      );
+
+      if (!enemies.length) continue;
+
+      let target = enemies[0];
+      let targetState = target.state || defaultPosition(target.number);
+      let best = Infinity;
+
+      for (const candidate of enemies) {
+        const state = candidate.state || defaultPosition(candidate.number);
+        const distance = Math.hypot(
+          state.x - bot.state.x,
+          state.y - bot.state.y
+        );
+
+        if (distance < best) {
+          best = distance;
+          target = candidate;
+          targetState = state;
+        }
+      }
+
+      const dx = targetState.x - bot.state.x;
+      const dy = targetState.y - bot.state.y;
+      const distance = Math.max(1, Math.hypot(dx, dy));
+
+      if (distance > 30) {
+        bot.state.x = Math.max(
+          24,
+          Math.min(936, bot.state.x + dx / distance * 2.1)
+        );
+
+        bot.state.y = Math.max(
+          24,
+          Math.min(576, bot.state.y + dy / distance * 2.1)
+        );
+      } else if (
+        target.socket &&
+        now - (bot.lastAttackAt || 0) >= 850
+      ) {
+        bot.lastAttackAt = now;
+
+        send(target.socket, {
+          type: "bot-hit",
+          sourcePlayerNumber: bot.number,
+          targetPlayerNumber: target.number,
+          amount: 8,
+          teamId: bot.teamId
+        });
+      } else if (
+        !target.socket &&
+        now - (bot.lastAttackAt || 0) >= 850
+      ) {
+        bot.lastAttackAt = now;
+
+        target.state ||= {
+          ...defaultPosition(target.number),
+          health: 100
+        };
+
+        target.state.health = Math.max(
+          0,
+          target.state.health - 8
+        );
+      }
+
+      bot.state.lastUpdated = now;
+    }
+
+    const states = room.players
+      .filter(p => !p.socket && p.isBot)
+      .map(bot => ({
+        number: bot.number,
+        teamId: bot.teamId,
+        x: bot.state?.x ?? defaultPosition(bot.number).x,
+        y: bot.state?.y ?? defaultPosition(bot.number).y,
+        health: bot.state?.health ?? 100,
+        shape: bot.shape || chooseShape(bot)
+      }));
+
+    if (states.length) {
+      broadcast(room, {
+        type: "bot-state",
+        players: states
+      });
+    }
+
+    check2v2RoundEnd(room);
+  }, 100);
+}
+
+/*
+====================================================
+START MATCH
+====================================================
+*/
+
 function startMatch(room) {
   if (!room) return;
 
@@ -183,9 +337,14 @@ function startMatch(room) {
   const humans = room.players.filter(p => p.socket);
   const botFill = room.mode === "2v2" && room.botFill === true;
 
-  if ((!botFill && humans.length !== capacity) ||
-      (botFill && humans.length < 1)) return;
+  if (
+    (!botFill && humans.length !== capacity) ||
+    (botFill && humans.length < 1)
+  ) {
+    return;
+  }
 
+  // Every connected human must independently be ready.
   if (!humans.every(player => player.ready)) return;
 
   const required = room.mode === "2v2"
@@ -200,28 +359,35 @@ function startMatch(room) {
       return;
     }
 
-    if (!SHAPES.includes(player.selectedShape) &&
-        player.selectedShape !== "random") {
+    if (
+      !SHAPES.includes(player.selectedShape) &&
+      player.selectedShape !== "random"
+    ) {
       send(player.socket, {
         type: "error",
-        message: `Your selected character (${player.selectedShape || "none"}) isn't supported by this server. Please select again.`
+        message:
+          `Your selected character (${player.selectedShape || "none"}) ` +
+          "isn't supported by this server. Please select again."
       });
+
       return;
     }
   }
 
   for (const player of room.players) {
     player.shape = chooseShape(player);
+
     player.state = {
       ...defaultPosition(player.number),
       health: 100
     };
+
     player.lastAttackAt = 0;
-    player.teamId = teamForNumber(player.number);
   }
 
   room.matchStarted = true;
   room.roundEndHandled = false;
+
   room.botAuthorityNumber = botFill
     ? Math.min(...humans.map(p => p.number))
     : null;
@@ -248,6 +414,24 @@ function startMatch(room) {
         };
   });
 
+  room.matchStarted = true;
+
+  room.id = room.id ||
+    [...rooms.entries()].find(([, value]) => value === room)?.[0];
+
+  for (const p of room.players) {
+    p.teamId = teamForNumber(p.number);
+
+    if (!p.state) {
+      p.state = {
+        ...defaultPosition(p.number),
+        health: 100
+      };
+    }
+
+    p.state.health = p.state.health ?? 100;
+  }
+
   broadcast(room, {
     type: "match-start",
     mode: room.mode || "1v1",
@@ -264,8 +448,17 @@ function startMatch(room) {
     botAuthorityNumber: room.botAuthorityNumber
   });
 
-  // The designated game client is responsible for running bot AI.
+  // Bot AI is run by one designated client using the same movement,
+  // collision, attacks, specials and supers as the built-in PvE bots.
+  // The server relays bot states and validates bot damage rather than
+  // running a second simple AI.
 }
+
+/*
+====================================================
+RESET FOR NEXT ROUND
+====================================================
+*/
 
 function resetForNextRound(room) {
   if (!room) return;
@@ -275,11 +468,11 @@ function resetForNextRound(room) {
     : [1, 2];
 
   if (
-    required.some(number =>
-      !room.players.some(p => p.number === number)
-    ) &&
+    required.some(number => !room.players.some(p => p.number === number)) &&
     !room.botFill
-  ) return;
+  ) {
+    return;
+  }
 
   for (const player of room.players) {
     player.shape = chooseShape(player);
@@ -290,6 +483,7 @@ function resetForNextRound(room) {
   broadcast(room, {
     type: "round-reset",
     mode: room.mode || "1v1",
+
     players: required.map(number => {
       const p = room.players.find(x => x.number === number);
 
@@ -309,12 +503,23 @@ function resetForNextRound(room) {
             isBot: true
           };
     }),
+
     p1Shape: room.players.find(p => p.number === 1)?.shape,
     p2Shape: room.players.find(p => p.number === 2)?.shape,
-    p1Random: room.players.find(p => p.number === 1)?.selectedShape === "random",
-    p2Random: room.players.find(p => p.number === 2)?.selectedShape === "random"
+
+    p1Random:
+      room.players.find(p => p.number === 1)?.selectedShape === "random",
+
+    p2Random:
+      room.players.find(p => p.number === 2)?.selectedShape === "random"
   });
 }
+
+/*
+====================================================
+WEBSOCKET CONNECTION
+====================================================
+*/
 
 wss.on("connection", socket => {
   let roomId = null;
@@ -323,6 +528,7 @@ wss.on("connection", socket => {
   socket.on("message", raw => {
     let message;
 
+    // Safely parse incoming JSON.
     try {
       message = JSON.parse(raw.toString());
     } catch {
@@ -331,18 +537,24 @@ wss.on("connection", socket => {
 
     if (!message || typeof message !== "object") return;
 
+    /*
+    ==================================================
+    JOIN ROOM
+    ==================================================
+    */
+
     if (message.type === "join") {
       roomId = String(message.room || "").trim();
 
       if (!roomId) return;
 
+      // Create room if it doesn't exist.
       if (!rooms.has(roomId)) {
         rooms.set(roomId, {
           players: [],
           id: roomId,
           mode: message.mode === "2v2" ? "2v2" : "1v1",
           botFill: false,
-          matchStarted: false,
           roundEndHandled: false,
           megumiPets: {}
         });
@@ -355,19 +567,12 @@ wss.on("connection", socket => {
         room.mode = requestedMode;
       }
 
-      if (room.mode !== requestedMode) {
+      if ((room.mode || "1v1") !== requestedMode) {
         send(socket, {
           type: "error",
           message: "This room was created for a different game mode."
         });
-        return;
-      }
 
-      if (room.matchStarted) {
-        send(socket, {
-          type: "error",
-          message: "This match has already started."
-        });
         return;
       }
 
@@ -379,8 +584,9 @@ wss.on("connection", socket => {
       }
 
       const occupied = new Set(room.players.map(p => p.number));
+
       const availableNumber = [1, 2, 3, 4]
-        .slice(0, capacity)
+        .slice(0, capacity === 2 ? 2 : 4)
         .find(n => !occupied.has(n));
 
       if (!availableNumber) {
@@ -415,38 +621,50 @@ wss.on("connection", socket => {
         }
       });
 
-      broadcast(room, {
-        type: "player-joined",
-        ...roomPlayerSummary(room)
-      }, socket);
+      broadcast(
+        room,
+        {
+          type: "player-joined",
+          ...roomPlayerSummary(room)
+        },
+        socket
+      );
 
       sendLobbyState(room);
       return;
     }
+
+    /*
+    ==================================================
+    REQUIRE PLAYER TO BE IN A ROOM
+    ==================================================
+    */
 
     if (!player || !roomId) return;
 
     const room = rooms.get(roomId);
     if (!room) return;
 
-    if (message.type === "start-with-bots" && room.mode === "2v2") {
-      if (room.matchStarted) return;
+    /*
+    ==================================================
+    START WITH BOTS
+    ==================================================
+    */
 
+    if (message.type === "start-with-bots" && room.mode === "2v2") {
       if (!player.selectedShape) {
         send(socket, {
           type: "error",
           message: "Choose a character before starting with bots."
         });
+
         return;
       }
 
       room.botFill = true;
 
-      for (const human of room.players.filter(p => p.socket)) {
-        if (!human.selectedShape) human.selectedShape = "random";
-        human.ready = true;
-      }
-
+      // Bot slots are ready automatically.
+      // Human players must each choose a character and press Ready.
       for (const number of [1, 2, 3, 4]) {
         if (!room.players.some(p => p.number === number)) {
           room.players.push({
@@ -462,22 +680,30 @@ wss.on("connection", socket => {
         }
       }
 
+      sendLobbyState(room);
       startMatch(room);
       return;
     }
+
+    /*
+    ==================================================
+    SELECT POSITION
+    ==================================================
+    */
 
     if (message.type === "select-position" && room.mode === "2v2") {
       const requested = Number(message.playerNumber);
 
       if (![1, 2, 3, 4].includes(requested)) return;
 
-      if (room.players.some(p =>
-        p !== player && p.number === requested
+      if (room.players.some(
+        p => p !== player && p.number === requested
       )) {
         send(socket, {
           type: "position-taken",
           playerNumber: requested
         });
+
         return;
       }
 
@@ -485,6 +711,7 @@ wss.on("connection", socket => {
       player.teamId = teamForNumber(requested);
       player.relation = "teammates";
       player.ready = false;
+      player.selectedShape = player.selectedShape || null;
 
       send(socket, {
         type: "position-selected",
@@ -498,18 +725,22 @@ wss.on("connection", socket => {
       return;
     }
 
-    if (message.type === "select-character") {
-      if (room.matchStarted || player.ready) return;
+    /*
+    ==================================================
+    CHARACTER SELECTION
+    ==================================================
+    */
 
+    if (message.type === "select-character") {
       const shape = String(message.shape || "").toLowerCase();
 
+      // Only allow supported characters or Random.
       if (!SHAPES.includes(shape) && shape !== "random") {
-        send(socket, {
-          type: "error",
-          message: "Unsupported character selection."
-        });
         return;
       }
+
+      // Don't allow changing character after Ready.
+      if (player.ready) return;
 
       player.selectedShape = shape;
       player.shape = null;
@@ -524,14 +755,19 @@ wss.on("connection", socket => {
       return;
     }
 
-    if (message.type === "ready") {
-      if (room.matchStarted) return;
+    /*
+    ==================================================
+    READY
+    ==================================================
+    */
 
+    if (message.type === "ready") {
       if (!player.selectedShape) {
         send(socket, {
           type: "error",
           message: "Choose a character before Ready."
         });
+
         return;
       }
 
@@ -540,8 +776,8 @@ wss.on("connection", socket => {
       for (const recipient of room.players) {
         if (!recipient.socket) continue;
 
-        const other = room.players.find(p =>
-          p.socket && p !== recipient
+        const other = room.players.find(
+          p => p.socket && p !== recipient
         );
 
         send(recipient.socket, {
@@ -556,20 +792,23 @@ wss.on("connection", socket => {
       }
 
       startMatch(room);
-      sendLobbyState(room);
       return;
     }
 
-    if (message.type === "cancel-ready") {
-      if (room.matchStarted) return;
+    /*
+    ==================================================
+    CANCEL READY
+    ==================================================
+    */
 
+    if (message.type === "cancel-ready") {
       player.ready = false;
 
       for (const recipient of room.players) {
         if (!recipient.socket) continue;
 
-        const other = room.players.find(p =>
-          p.socket && p !== recipient
+        const other = room.players.find(
+          p => p.socket && p !== recipient
         );
 
         send(recipient.socket, {
@@ -583,18 +822,25 @@ wss.on("connection", socket => {
         });
       }
 
-      sendLobbyState(room);
       return;
     }
+
+    /*
+    ==================================================
+    MEGUMI SHIKIGAMI
+    ==================================================
+    */
 
     if (message.type === "megumi-pet-request") {
       const targetNumber = Number(message.playerNumber);
 
+      // A player can only request a Shikigami for themselves.
       if (targetNumber !== player.number) return;
 
       const petType = randomFrom(PET_TYPES);
       room.megumiPets[targetNumber] = petType;
 
+      // Send the same random result to both computers.
       broadcast(room, {
         type: "megumi-pet-type",
         playerNumber: targetNumber,
@@ -604,15 +850,23 @@ wss.on("connection", socket => {
       return;
     }
 
+    /*
+    ==================================================
+    ROUND END
+    ==================================================
+    */
+
     if (message.type === "round-end") {
       const winnerNumber = Number(message.winnerNumber);
 
+      // 1v1 accepts P1/P2; 2v2 accepts a team winner or player on that team.
       if (room.mode === "2v2") {
         if (![1, 2, 3, 4].includes(winnerNumber)) return;
       } else if (winnerNumber !== 1 && winnerNumber !== 2) {
         return;
       }
 
+      // Prevent the same round ending more than once.
       if (room.roundEndHandled) return;
 
       room.roundEndHandled = true;
@@ -629,28 +883,50 @@ wss.on("connection", socket => {
       return;
     }
 
+    /*
+    ==================================================
+    NEXT ROUND
+    ==================================================
+    */
+
     if (message.type === "next-round") {
       const requiredCount = roomCapacity(room);
 
       if (
         !room.roundEndHandled ||
-        (!room.botFill &&
-          room.players.filter(p => p.socket).length !== requiredCount)
-      ) return;
+        (
+          !room.botFill &&
+          room.players.filter(p => p.socket).length !== requiredCount
+        )
+      ) {
+        return;
+      }
 
+      // Clear old Megumi selections for the next round.
       room.megumiPets = {};
+
       resetForNextRound(room);
       return;
     }
+
+    /*
+    ==================================================
+    GAME EVENT RELAY
+    ==================================================
+    */
 
     if (message.type === "game") {
       if (!message.data || typeof message.data !== "object") {
         return;
       }
 
-      if (!room.matchStarted) return;
-
       const gameData = { ...message.data };
+
+      /*
+      -----------------------------------------------
+      BOT STATE
+      -----------------------------------------------
+      */
 
       if (
         gameData.kind === "bot-state" &&
@@ -660,14 +936,17 @@ wss.on("connection", socket => {
         if (
           player.number !== room.botAuthorityNumber ||
           !Array.isArray(gameData.players)
-        ) return;
+        ) {
+          return;
+        }
 
         const validBots = [];
 
         for (const state of gameData.players) {
           const number = Number(state.number);
-          const bot = room.players.find(p =>
-            p.number === number && !p.socket && p.isBot
+
+          const bot = room.players.find(
+            p => p.number === number && !p.socket && p.isBot
           );
 
           if (
@@ -675,16 +954,29 @@ wss.on("connection", socket => {
             !Number.isFinite(state.x) ||
             !Number.isFinite(state.y) ||
             !Number.isFinite(state.health)
-          ) continue;
+          ) {
+            continue;
+          }
 
           bot.state ||= {
             ...defaultPosition(number),
             health: 100
           };
 
-          bot.state.x = Math.max(0, Math.min(960, state.x));
-          bot.state.y = Math.max(0, Math.min(600, state.y));
-          bot.state.health = Math.max(0, Math.min(500, state.health));
+          bot.state.x = Math.max(
+            0,
+            Math.min(960, state.x)
+          );
+
+          bot.state.y = Math.max(
+            0,
+            Math.min(600, state.y)
+          );
+
+          bot.state.health = Math.max(
+            0,
+            Math.min(500, state.health)
+          );
 
           if (SHAPES.includes(state.shape)) {
             bot.shape = state.shape;
@@ -703,15 +995,25 @@ wss.on("connection", socket => {
         }
 
         if (validBots.length) {
-          broadcast(room, {
-            type: "bot-state",
-            players: validBots
-          }, socket);
+          broadcast(
+            room,
+            {
+              type: "bot-state",
+              players: validBots
+            },
+            socket
+          );
         }
 
         check2v2RoundEnd(room);
         return;
       }
+
+      /*
+      -----------------------------------------------
+      PLAYER STATE
+      -----------------------------------------------
+      */
 
       if (
         gameData.kind === "state" &&
@@ -723,8 +1025,15 @@ wss.on("connection", socket => {
           health: 100
         };
 
-        player.state.x = Math.max(0, Math.min(960, gameData.x));
-        player.state.y = Math.max(0, Math.min(600, gameData.y));
+        player.state.x = Math.max(
+          0,
+          Math.min(960, gameData.x)
+        );
+
+        player.state.y = Math.max(
+          0,
+          Math.min(600, gameData.y)
+        );
 
         if (Number.isFinite(gameData.health)) {
           player.state.health = Math.max(0, gameData.health);
@@ -733,13 +1042,23 @@ wss.on("connection", socket => {
         check2v2RoundEnd(room);
       }
 
+      /*
+      -----------------------------------------------
+      DAMAGE VALIDATION
+      -----------------------------------------------
+      */
+
       if (gameData.kind === "damage") {
-        const targetPlayerNumber = Number(gameData.targetPlayerNumber);
+        const targetPlayerNumber = Number(
+          gameData.targetPlayerNumber
+        );
 
-        if (![1, 2, 3, 4].includes(targetPlayerNumber)) return;
+        if (![1, 2, 3, 4].includes(targetPlayerNumber)) {
+          return;
+        }
 
-        const targetPlayer = room.players.find(p =>
-          p.number === targetPlayerNumber
+        const targetPlayer = room.players.find(
+          p => p.number === targetPlayerNumber
         );
 
         if (!targetPlayer) return;
@@ -751,28 +1070,35 @@ wss.on("connection", socket => {
         let sourceTeam = player.teamId;
 
         if (sourceNumber !== player.number) {
-          const source = room.players.find(p =>
-            p.number === sourceNumber
+          const source = room.players.find(
+            p => p.number === sourceNumber
           );
 
-          if (!(
-            room.mode === "2v2" &&
-            room.botFill &&
-            player.number === room.botAuthorityNumber &&
-            source &&
-            !source.socket &&
-            source.isBot
-          )) return;
+          if (
+            !(
+              room.mode === "2v2" &&
+              room.botFill &&
+              player.number === room.botAuthorityNumber &&
+              source &&
+              !source.socket &&
+              source.isBot
+            )
+          ) {
+            return;
+          }
 
           sourceTeam = source.teamId;
         }
 
+        // Reject self-damage and teammate damage.
         if (targetPlayerNumber === sourceNumber) return;
 
         if (
           room.mode === "2v2" &&
           teamForNumber(targetPlayerNumber) === sourceTeam
-        ) return;
+        ) {
+          return;
+        }
 
         const amount = Number(gameData.amount);
 
@@ -794,6 +1120,8 @@ wss.on("connection", socket => {
           };
 
           if (sourceNumber !== player.number) {
+            // The designated bot-AI client has already simulated this hit.
+            // Its next bot-state packet is the source of truth for bot health.
             return;
           }
 
@@ -819,21 +1147,46 @@ wss.on("connection", socket => {
         }
       }
 
-      broadcast(room, {
-        type: "game",
-        playerNumber: player.number,
-        teamId: player.teamId,
-        relation: room.mode === "2v2" ? "teammates" : "opponent",
-        data: gameData
-      }, socket);
+      /*
+      -----------------------------------------------
+      RELAY EVENT TO OTHER PLAYERS
+      -----------------------------------------------
+      */
+
+      broadcast(
+        room,
+        {
+          type: "game",
+          playerNumber: player.number,
+          teamId: player.teamId,
+          relation: room.mode === "2v2"
+            ? "teammates"
+            : "opponent",
+          data: gameData
+        },
+        socket
+      );
 
       return;
     }
 
+    /*
+    ==================================================
+    PING
+    ==================================================
+    */
+
     if (message.type === "ping") {
       send(socket, { type: "pong" });
+      return;
     }
   });
+
+  /*
+  ==================================================
+  PLAYER DISCONNECT
+  ==================================================
+  */
 
   socket.on("close", () => {
     if (!roomId) return;
@@ -841,7 +1194,10 @@ wss.on("connection", socket => {
     const room = rooms.get(roomId);
     if (!room) return;
 
+    // Remove the disconnected player.
     room.players = room.players.filter(p => p.socket !== socket);
+
+    // Reset round-specific server state and let remaining players ready up.
     room.roundEndHandled = false;
     room.matchStarted = false;
     room.megumiPets = {};
@@ -850,6 +1206,7 @@ wss.on("connection", socket => {
       remaining.ready = false;
     }
 
+    // Tell remaining players that someone disconnected.
     broadcast(room, {
       type: "player-left",
       playerNumber: player ? player.number : null,
@@ -858,11 +1215,22 @@ wss.on("connection", socket => {
 
     sendLobbyState(room);
 
+    // Delete empty rooms.
     if (!room.players.some(p => p.socket)) {
+      if (room.botLoop) {
+        clearInterval(room.botLoop);
+      }
+
       rooms.delete(roomId);
     }
   });
 });
+
+/*
+====================================================
+START SERVER
+====================================================
+*/
 
 server.listen(PORT, () => {
   console.log(`Sorcery Brawl server running on port ${PORT}`);
