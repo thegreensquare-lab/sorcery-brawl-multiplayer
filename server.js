@@ -6,18 +6,27 @@ const rooms = new Map();
 
 // Keep these IDs in sync with the character IDs used by the client.
 // Random includes every supported character, including Todo/Yuji.
+// These are the WIRE IDs used by the current HTML client. The client maps
+// its visual IDs (star5/square/x/etc.) to these legacy wire IDs before send,
+// then maps them back on receipt. Keep these IDs in sync with that mapping.
 const SHAPES = [
-  "circle",   // Gojo
-  "square",   // Choso
-  "triangle", // Naoya
-  "rhombus",  // Sukuna
-  "star",     // Megumi
-  "pentagon", // Hakari
-  "plus",     // Yuta
-  "x",        // Nobara
-  "octagon",  // Todo / Yuji
-  "trapezoid" // Jogo
+  "circle",     // Gojo
+  "square",     // Choso (wire ID; visual ID is star5)
+  "triangle",   // Naoya (wire ID; visual ID is square)
+  "rhombus",    // Sukuna (wire ID; visual ID is x)
+  "star",       // Megumi (wire ID; visual ID is star10)
+  "pentagon",   // Hakari
+  "plus",       // Yuta (wire ID; visual ID is heart)
+  "x",          // Nobara (wire ID; visual ID is plus)
+  "octagon",    // Todo / Yuji
+  "trapezoid",  // Jogo
+  "mechamaru"   // Mechamaru
 ];
+
+// Todo and Yuji share one visual/wire shape (octagon) but are two separate
+// characters in the HTML random pool. Weight octagon twice for random picks
+// so each character has the same chance. Keep SHAPES unique for validation.
+const RANDOM_SHAPES = [...SHAPES, "octagon"];
 
 const PET_TYPES = [1, 2, 3];
 
@@ -157,9 +166,9 @@ function chooseShape(player) {
 
   if (player.selectedShape === "random") {
     // Avoid repeating the same character in consecutive rounds.
-    const choices = SHAPES.filter(shape => shape !== player.shape);
+    const choices = RANDOM_SHAPES.filter(shape => shape !== player.shape);
 
-    return randomFrom(choices.length ? choices : SHAPES);
+    return randomFrom(choices.length ? choices : RANDOM_SHAPES);
   }
 
   return SHAPES.includes(player.selectedShape)
@@ -408,7 +417,7 @@ function startMatch(room) {
           number,
           teamId: teamForNumber(number),
           relation: "teammates",
-          shape: randomFrom(SHAPES),
+          shape: randomFrom(RANDOM_SHAPES),
           random: true,
           isBot: true
         };
@@ -498,7 +507,7 @@ function resetForNextRound(room) {
         : {
             number,
             teamId: teamForNumber(number),
-            shape: randomFrom(SHAPES),
+            shape: randomFrom(RANDOM_SHAPES),
             random: true,
             isBot: true
           };
